@@ -104,6 +104,21 @@ public final class DoseRepository {
                 WHERE sync_state='CLEAN' AND medicine_id IN (SELECT id FROM medicine WHERE person_id=?)""", personId);
     }
 
+    /** After unlinking Google: forget event ids and drop rows only waiting for a remote delete. */
+    public void resetSyncForPerson(long personId) {
+        db.run(c -> {
+            try (var drop = prepare(c, """
+                    DELETE FROM dose WHERE sync_state='DELETE_PENDING'
+                    AND medicine_id IN (SELECT id FROM medicine WHERE person_id=?)""", personId);
+                 var reset = prepare(c, """
+                    UPDATE dose SET calendar_event_id=NULL, sync_state='DIRTY'
+                    WHERE medicine_id IN (SELECT id FROM medicine WHERE person_id=?)""", personId)) {
+                drop.executeUpdate();
+                reset.executeUpdate();
+            }
+        });
+    }
+
     public void delete(long id) {
         execute("DELETE FROM dose WHERE id=?", id);
     }

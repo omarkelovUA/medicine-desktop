@@ -87,6 +87,26 @@ class DoseRepositoryTest {
     }
 
     @Test
+    void resetSyncForPersonClearsEventIds() {
+        doses.insertAll(List.of(planned(mid, dt("2026-10-13T08:00"))));
+        var d = day13().getFirst();
+        doses.update(d.withCalendarEventId("ev").withSyncState(CLEAN));
+        doses.resetSyncForPerson(pid);
+        var after = doses.findById(d.id()).orElseThrow();
+        assertThat(after.calendarEventId()).isNull();
+        assertThat(after.syncState()).isEqualTo(DIRTY);
+    }
+
+    @Test
+    void resetSyncForPersonDropsDeletePendingRows() {
+        doses.insertAll(List.of(planned(mid, dt("2026-10-13T08:00"))));
+        var d = day13().getFirst();
+        doses.update(d.withCalendarEventId("ev").withSyncState(DELETE_PENDING));
+        doses.resetSyncForPerson(pid);
+        assertThat(doses.findById(d.id())).isEmpty();
+    }
+
+    @Test
     void markDirtyForPersonAndDelete() {
         doses.insertAll(List.of(planned(mid, dt("2026-10-13T08:00"))));
         var d = day13().getFirst();
