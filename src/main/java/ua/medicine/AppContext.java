@@ -8,6 +8,7 @@ import ua.medicine.service.DoseService;
 import ua.medicine.service.HistoryService;
 import ua.medicine.service.MedicineService;
 import ua.medicine.service.PersonService;
+import ua.medicine.service.ReminderService;
 import ua.medicine.sync.CalendarSyncService;
 import ua.medicine.sync.GoogleAuthService;
 import ua.medicine.sync.GoogleCalendarGatewayFactory;
@@ -32,6 +33,7 @@ public final class AppContext implements AutoCloseable {
     private final MedicineService medicineService;
     private final DoseService doseService;
     private final HistoryService historyService;
+    private final ReminderService reminderService;
     private final GoogleLinkService googleLink;
     private final ExecutorService io = Executors.newSingleThreadExecutor(r -> {
         Thread t = new Thread(r, "io");
@@ -53,6 +55,7 @@ public final class AppContext implements AutoCloseable {
         medicineService = new MedicineService(medicineRepository, doseRepository, clock, sync);
         doseService = new DoseService(doseRepository, medicineRepository, clock, sync);
         historyService = new HistoryService(doseRepository, medicineRepository, personRepository, clock);
+        reminderService = new ReminderService(doseRepository, medicineRepository, personRepository, clock);
         googleLink = new GoogleLinkService(googleAuth, gatewayFactory, personRepository, doseRepository, sync);
     }
 
@@ -98,6 +101,10 @@ public final class AppContext implements AutoCloseable {
 
     public HistoryService historyService() {
         return historyService;
+    }
+
+    public ReminderService reminderService() {
+        return reminderService;
     }
 
     public GoogleLinkService googleLink() {

@@ -36,6 +36,7 @@ public final class DashboardController {
 
     private final AppContext ctx;
     private final Set<Long> authFailedPersonIds = new HashSet<>();
+    private final NotificationPane notifications = new NotificationPane();
     private Long selectedPersonId; // null = "Усі"
     private Stage stage;
 
@@ -62,6 +63,8 @@ public final class DashboardController {
 
     public void start(Stage stage) {
         this.stage = stage;
+        StackPane.setAlignment(notifications, Pos.BOTTOM_RIGHT);
+        root.getChildren().add(notifications);
         ctx.sync().setListener(result -> Platform.runLater(() -> onSyncResult(result)));
         refresh();
     }
@@ -73,6 +76,10 @@ public final class DashboardController {
 
     public StackPane root() {
         return root;
+    }
+
+    public NotificationPane notifications() {
+        return notifications;
     }
 
     public Stage stage() {

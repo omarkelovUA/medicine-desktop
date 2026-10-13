@@ -16,6 +16,9 @@ import java.util.function.Consumer;
 final class Steps {
 
     private static final Map<String, Consumer<App>> STEPS = Map.of(
+            "reminder", app -> app.dashboard().notifications().show(
+                    new ua.medicine.service.Reminder(1, "Марія", "Амоксицилін", "500 мг", java.time.LocalTime.of(8, 0)),
+                    r -> { }, r -> { }),
             "history", app -> clickButton(app.dashboard().stage(), "Історія"),
             "addMedicine", app -> fire(app.dashboard().root().lookup("#addMedicineButton")),
             "addMedicineSave", app -> {

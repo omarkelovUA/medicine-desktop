@@ -15,6 +15,7 @@ public class App extends Application {
 
     private AppContext context;
     private DashboardController dashboard;
+    private AppJobs jobs;
 
     public static void main(String[] args) {
         launch(args);
@@ -39,6 +40,8 @@ public class App extends Application {
         stage.show();
 
         dashboard.start(stage);
+        jobs = new AppJobs(context, dashboard, dashboard.notifications());
+        jobs.start();
         context.sync().requestSync();
     }
 
@@ -48,6 +51,9 @@ public class App extends Application {
 
     @Override
     public void stop() {
+        if (jobs != null) {
+            jobs.stop();
+        }
         if (dashboard != null) {
             dashboard.stop();
         }
