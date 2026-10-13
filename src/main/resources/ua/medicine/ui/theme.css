@@ -1,0 +1,192 @@
+.root {
+    -accent: #2f7d5b;
+    -danger: #d33a3a;
+    -muted: #6b7280;
+    -border: #d9dde3;
+    -fx-font-family: "Noto Sans", "DejaVu Sans", sans-serif;
+    -fx-font-size: 13px;
+}
+
+.app-root {
+    -fx-background-color: #f6f7f9;
+}
+
+.header {
+    -fx-padding: 10 16 10 16;
+    -fx-background-color: white;
+    -fx-border-color: transparent transparent -border transparent;
+}
+
+.app-title {
+    -fx-font-size: 18px;
+    -fx-font-weight: bold;
+}
+
+.button.primary {
+    -fx-background-color: -accent;
+    -fx-text-fill: white;
+    -fx-font-weight: bold;
+}
+
+.tab-bar {
+    -fx-padding: 8 16 0 16;
+    -fx-background-color: white;
+    -fx-border-color: transparent transparent -border transparent;
+}
+
+.person-tab {
+    -fx-background-color: transparent;
+    -fx-background-radius: 6 6 0 0;
+    -fx-padding: 6 12 6 12;
+    -fx-border-color: transparent;
+    -fx-border-width: 0 0 2 0;
+}
+
+.person-tab:hover {
+    -fx-background-color: #eef1f4;
+}
+
+.person-tab:selected {
+    -fx-border-color: -accent;
+    -fx-font-weight: bold;
+}
+
+.badge {
+    -fx-background-color: -danger;
+    -fx-text-fill: white;
+    -fx-background-radius: 8;
+    -fx-padding: 0 5 0 5;
+    -fx-font-size: 11px;
+}
+
+.avatar-initial {
+    -fx-text-fill: white;
+    -fx-font-weight: bold;
+}
+
+.person-bar {
+    -fx-padding: 8 16 8 16;
+}
+
+.cards {
+    -fx-padding: 16;
+}
+
+.cards-scroll, .cards-scroll > .viewport {
+    -fx-background-color: transparent;
+}
+
+.medicine-card {
+    -fx-background-color: white;
+    -fx-background-radius: 10;
+    -fx-border-color: -border;
+    -fx-border-radius: 10;
+    -fx-padding: 12;
+    -fx-spacing: 6;
+    -fx-cursor: hand;
+}
+
+.medicine-card:hover {
+    -fx-border-color: -accent;
+}
+
+.card-title {
+    -fx-font-size: 15px;
+    -fx-font-weight: bold;
+}
+
+.muted {
+    -fx-text-fill: -muted;
+}
+
+.course-progress .bar {
+    -fx-background-color: -accent;
+    -fx-background-insets: 0;
+    -fx-background-radius: 3;
+}
+
+.course-progress .track {
+    -fx-background-radius: 3;
+}
+
+.dose-chip {
+    -fx-border-color: -border;
+    -fx-border-radius: 12;
+    -fx-background-radius: 12;
+    -fx-padding: 3 8 3 6;
+    -fx-cursor: default;
+}
+
+.dose-chip.dose-taken {
+    -fx-background-color: #e7f3ec;
+}
+
+.dose-chip.dose-overdue {
+    -fx-border-color: -danger;
+    -fx-text-fill: -danger;
+    -fx-background-color: #fdecec;
+}
+
+.dose-chip.dose-missed {
+    -fx-text-fill: -danger;
+}
+
+.empty-state {
+    -fx-text-fill: -muted;
+    -fx-font-size: 15px;
+    -fx-padding: 40;
+}
+
+.status-bar {
+    -fx-padding: 4 16 4 16;
+    -fx-background-color: white;
+    -fx-border-color: -border transparent transparent transparent;
+}
+
+.error-label {
+    -fx-text-fill: -danger;
+    -fx-font-size: 12px;
+}
+
+.form-label {
+    -fx-text-fill: -muted;
+    -fx-font-size: 11px;
+}
+
+.color-swatch {
+    -fx-cursor: hand;
+}
+
+.notification {
+    -fx-background-color: white;
+    -fx-background-radius: 10;
+    -fx-border-color: -accent;
+    -fx-border-radius: 10;
+    -fx-border-width: 2;
+    -fx-padding: 12;
+    -fx-spacing: 8;
+    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.25), 12, 0, 0, 3);
+}
+
+.history-tile {
+    -fx-background-color: white;
+    -fx-background-radius: 8;
+    -fx-border-color: -border;
+    -fx-border-radius: 8;
+    -fx-padding: 8 12 8 12;
+}
+
+.history-percent {
+    -fx-font-size: 20px;
+    -fx-font-weight: bold;
+}
+
+.status-taken {
+    -fx-text-fill: -accent;
+    -fx-font-weight: bold;
+}
+
+.status-missed, .status-overdue {
+    -fx-text-fill: -danger;
+    -fx-font-weight: bold;
+}
