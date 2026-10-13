@@ -76,6 +76,19 @@ public final class MedicineRepository {
         });
     }
 
+    /** Deletes the person's inactive medicines together with their doses. */
+    public void deleteInactiveByPerson(long personId) {
+        db.run(c -> {
+            try (var doses = prepare(c, """
+                    DELETE FROM dose WHERE medicine_id IN (SELECT id FROM medicine WHERE active=0 AND person_id=?)""",
+                    personId);
+                 var meds = prepare(c, "DELETE FROM medicine WHERE active=0 AND person_id=?", personId)) {
+                doses.executeUpdate();
+                meds.executeUpdate();
+            }
+        });
+    }
+
     private List<Medicine> query(String sql, Object... args) {
         return db.tx(c -> {
             try (var st = prepare(c, sql, args); var rs = st.executeQuery()) {

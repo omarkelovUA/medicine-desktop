@@ -18,6 +18,10 @@ public record Medicine(Long id, long personId, String name, String dosage, Strin
         return new Medicine(id, personId, name, dosage, color, startDate, course, schedule, active);
     }
 
+    public Medicine withSchedule(Schedule schedule) {
+        return new Medicine(id, personId, name, dosage, color, startDate, course, schedule, active);
+    }
+
     public Medicine withActive(boolean active) {
         return new Medicine(id, personId, name, dosage, color, startDate, course, schedule, active);
     }

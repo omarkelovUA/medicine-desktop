@@ -12,7 +12,7 @@ import java.util.Optional;
 
 import static ua.medicine.persistence.MedicineRepository.prepare;
 
-/** Dose rows. Finders hide DELETE_PENDING rows except {@link #findNeedingSync}. */
+/** Dose rows. Finders hide DELETE_PENDING rows except {@link #findNeedingSync} and {@link #findFutureUntaken}. */
 public final class DoseRepository {
 
     private static final String VISIBLE = " sync_state <> 'DELETE_PENDING' ";
@@ -69,8 +69,9 @@ public final class DoseRepository {
                 + "ORDER BY scheduled_at, id", text(from), text(toExclusive));
     }
 
+    /** Future not-taken doses, including DELETE_PENDING ones so a regenerated time can revive them. */
     public List<DoseOccurrence> findFutureUntaken(long medicineId, LocalDateTime after) {
-        return query("SELECT * FROM dose WHERE medicine_id=? AND scheduled_at>? AND taken_at IS NULL AND" + VISIBLE
+        return query("SELECT * FROM dose WHERE medicine_id=? AND scheduled_at>? AND taken_at IS NULL "
                 + "ORDER BY scheduled_at", medicineId, text(after));
     }
 
