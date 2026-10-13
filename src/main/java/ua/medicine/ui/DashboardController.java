@@ -284,5 +284,6 @@ public final class DashboardController {
 
     @FXML
     private void openHistory() {
+        HistoryController.show(window(), ctx);
     }
 }

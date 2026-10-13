@@ -16,6 +16,7 @@ import java.util.function.Consumer;
 final class Steps {
 
     private static final Map<String, Consumer<App>> STEPS = Map.of(
+            "history", app -> clickButton(app.dashboard().stage(), "Історія"),
             "addMedicine", app -> fire(app.dashboard().root().lookup("#addMedicineButton")),
             "addMedicineSave", app -> {
                 later(600, () -> {
