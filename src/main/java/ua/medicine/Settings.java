@@ -2,6 +2,8 @@ package ua.medicine;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import ua.medicine.schedule.TimeScale;
+import ua.medicine.ui.DashboardView;
 import ua.medicine.ui.ThemeMode;
 
 import java.io.IOException;
@@ -17,6 +19,8 @@ public final class Settings {
 
     private static final Logger log = LoggerFactory.getLogger(Settings.class);
     private static final String THEME = "theme";
+    private static final String VIEW = "dashboard.view";
+    private static final String ZOOM = "timeline.zoom";
 
     private final Path file;
     private final Properties props = new Properties();
@@ -33,15 +37,40 @@ public final class Settings {
     }
 
     public ThemeMode themeMode() {
-        try {
-            return ThemeMode.valueOf(props.getProperty(THEME, ThemeMode.SYSTEM.name()));
-        } catch (IllegalArgumentException e) {
-            return ThemeMode.SYSTEM;
-        }
+        return get(THEME, ThemeMode.SYSTEM);
     }
 
     public void setThemeMode(ThemeMode mode) {
-        props.setProperty(THEME, mode.name());
+        set(THEME, mode);
+    }
+
+    public DashboardView dashboardView() {
+        return get(VIEW, DashboardView.CARDS);
+    }
+
+    public void setDashboardView(DashboardView view) {
+        set(VIEW, view);
+    }
+
+    public TimeScale.Zoom timelineZoom() {
+        return get(ZOOM, TimeScale.Zoom.MONTHS);
+    }
+
+    public void setTimelineZoom(TimeScale.Zoom zoom) {
+        set(ZOOM, zoom);
+    }
+
+    /** The stored constant, or {@code fallback} when missing or unknown. */
+    private <E extends Enum<E>> E get(String key, E fallback) {
+        try {
+            return Enum.valueOf(fallback.getDeclaringClass(), props.getProperty(key, fallback.name()));
+        } catch (IllegalArgumentException e) {
+            return fallback;
+        }
+    }
+
+    private void set(String key, Enum<?> value) {
+        props.setProperty(key, value.name());
         save();
     }
 
