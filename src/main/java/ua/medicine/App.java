@@ -4,6 +4,7 @@ import javafx.application.Application;
 import javafx.fxml.FXMLLoader;
 import javafx.scene.Parent;
 import javafx.scene.Scene;
+import javafx.scene.image.Image;
 import javafx.stage.Stage;
 import ua.medicine.i18n.Messages;
 import ua.medicine.ui.DashboardController;
@@ -36,6 +37,7 @@ public class App extends Application {
         var scene = new Scene(root, 1100, 750);
         scene.getStylesheets().add(DashboardController.class.getResource("theme.css").toExternalForm());
         stage.setTitle(Messages.get("app.title"));
+        stage.getIcons().add(new Image(App.class.getResourceAsStream("icon.png")));
         stage.setScene(scene);
         stage.show();
 
