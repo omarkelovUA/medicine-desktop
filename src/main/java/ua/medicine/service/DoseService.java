@@ -3,7 +3,6 @@ package ua.medicine.service;
 import ua.medicine.domain.DoseOccurrence;
 import ua.medicine.domain.DoseStatus;
 import ua.medicine.domain.Medicine;
-import ua.medicine.domain.SyncState;
 import ua.medicine.persistence.DoseRepository;
 import ua.medicine.persistence.MedicineRepository;
 import ua.medicine.schedule.CurrentPeriod;
@@ -34,10 +33,9 @@ public final class DoseService {
         if (dose.takenAt() != null) {
             return dose;
         }
-        DoseOccurrence taken = doses.update(
-                dose.withTakenAt(LocalDateTime.now(clock)).withMissed(false).withSyncState(SyncState.DIRTY));
+        doses.markTaken(doseId, LocalDateTime.now(clock));
         syncTrigger.requestSync();
-        return taken;
+        return find(doseId);
     }
 
     /** Clears "taken"; allowed only on the dose's own day. */
@@ -46,16 +44,14 @@ public final class DoseService {
         if (!dose.scheduledAt().toLocalDate().equals(LocalDate.now(clock))) {
             throw new IllegalStateException("A dose can be unticked only on its own day");
         }
-        DoseOccurrence untaken = doses.update(dose.withTakenAt(null).withSyncState(SyncState.DIRTY));
+        doses.unmarkTaken(doseId);
         syncTrigger.requestSync();
-        return untaken;
+        return find(doseId);
     }
 
     /** Persists MISSED for not-taken doses of past days. */
     public int resolveMissed() {
-        List<DoseOccurrence> unresolved = doses.findUnresolvedBefore(LocalDate.now(clock).atStartOfDay());
-        unresolved.forEach(d -> doses.update(d.withMissed(true)));
-        return unresolved.size();
+        return doses.markMissedBefore(LocalDate.now(clock).atStartOfDay());
     }
 
     /** Doses a dashboard card shows: today, this week or this month depending on the schedule. */

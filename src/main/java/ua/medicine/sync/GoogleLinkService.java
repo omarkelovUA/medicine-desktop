@@ -25,7 +25,7 @@ public final class GoogleLinkService {
         this.syncTrigger = syncTrigger;
     }
 
-    /** Runs the browser consent flow (blocking), then pushes all of the person's doses. */
+    /** Runs the browser consent flow (blocking, always fresh consent), then pushes all of the person's doses. */
     public Person link(long personId) {
         Person person = find(personId);
         GoogleCalendarGateway gateway = gateways.forCredential(auth.authorize(personId));
@@ -37,13 +37,15 @@ public final class GoogleLinkService {
         return linked;
     }
 
-    /** Forgets the token; events already in Google stay there. */
+    /**
+     * Forgets the token; events already in Google stay there. Event ids are kept so that re-linking the
+     * same account updates those events instead of duplicating them (another account answers 404 and
+     * the events are created anew).
+     */
     public Person unlink(long personId) {
         Person person = find(personId);
         auth.forget(personId);
-        Person unlinked = persons.save(person.withGoogle(null, null));
-        doses.resetSyncForPerson(personId);
-        return unlinked;
+        return persons.save(person.withGoogle(null, null));
     }
 
     private Person find(long personId) {

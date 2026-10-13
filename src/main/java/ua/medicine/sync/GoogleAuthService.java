@@ -1,5 +1,6 @@
 package ua.medicine.sync;
 
+import com.google.api.client.auth.oauth2.AuthorizationCodeRequestUrl;
 import com.google.api.client.auth.oauth2.Credential;
 import com.google.api.client.extensions.java6.auth.oauth2.AuthorizationCodeInstalledApp;
 import com.google.api.client.extensions.jetty.auth.oauth2.LocalServerReceiver;
@@ -35,6 +36,8 @@ public final class GoogleAuthService {
 
     private final AppPaths paths;
     private NetHttpTransport transport;
+    private AuthorizationCodeInstalledApp.Browser browser = GoogleAuthService::openBrowser;
+    private volatile LocalServerReceiver activeReceiver;
 
     public GoogleAuthService(AppPaths paths) {
         this.paths = paths;
@@ -48,15 +51,45 @@ public final class GoogleAuthService {
         return paths.clientSecret();
     }
 
-    /** Opens the system browser for consent and stores the token. Blocks until the user finishes. */
+    /**
+     * Opens the system browser for consent and stores the new token. Blocks until the user finishes or
+     * {@link #cancelPendingAuthorization()} is called. Any stored token is dropped first: the library would
+     * otherwise silently reuse it, even when it is revoked or expired.
+     */
     public Credential authorize(long personId) {
+        forget(personId);
+        var receiver = new LocalServerReceiver.Builder().setHost("localhost").build();
+        activeReceiver = receiver;
         try {
             var flow = flow(personId);
-            var receiver = new LocalServerReceiver.Builder().setHost("localhost").build();
-            return new AuthorizationCodeInstalledApp(flow, receiver, GoogleAuthService::openBrowser).authorize(USER);
+            return new AuthorizationCodeInstalledApp(flow, receiver, browser) {
+                @Override
+                protected void onAuthorization(AuthorizationCodeRequestUrl url) throws IOException {
+                    url.set("prompt", "consent"); // always issue a fresh refresh token
+                    super.onAuthorization(url);
+                }
+            }.authorize(USER);
         } catch (IOException e) {
             throw new UncheckedIOException(e);
+        } finally {
+            activeReceiver = null;
         }
+    }
+
+    /** Ends a sign-in the user abandoned (closed tab, wrong account) so it can be started again. */
+    public void cancelPendingAuthorization() {
+        var receiver = activeReceiver;
+        if (receiver != null) {
+            try {
+                receiver.stop();
+            } catch (IOException e) {
+                log.warn("Stopping the sign-in receiver failed", e);
+            }
+        }
+    }
+
+    void setBrowser(AuthorizationCodeInstalledApp.Browser browser) {
+        this.browser = browser;
     }
 
     public Optional<Credential> load(long personId) {

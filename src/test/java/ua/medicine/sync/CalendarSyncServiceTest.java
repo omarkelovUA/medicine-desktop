@@ -16,11 +16,15 @@ import ua.medicine.service.SyncTrigger;
 import ua.medicine.testutil.MutableClock;
 import ua.medicine.testutil.TestDb;
 
+import java.time.Duration;
 import java.util.HashMap;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 import java.util.List;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.junit.jupiter.api.Assertions.assertTimeoutPreemptively;
 import static ua.medicine.domain.PeriodUnit.DAYS;
 import static ua.medicine.domain.SyncState.CLEAN;
 import static ua.medicine.domain.SyncState.DIRTY;
@@ -157,5 +161,42 @@ class CalendarSyncServiceTest {
         medicines.create(med(maria.id(), d("2026-10-13"), new Course.Fixed(1, DAYS),
                 new Schedule.Daily(List.of(t("20:00")))));
         assertThat(sync.syncNow().authFailedPersonIds()).containsExactly(maria.id());
+    }
+
+    @Test
+    void requestSyncDoesNotBlockWhileSyncIsRunning() throws Exception {
+        var entered = new CountDownLatch(1);
+        var release = new CountDownLatch(1);
+        fake.onInsert = () -> {
+            entered.countDown();
+            try {
+                release.await(5, TimeUnit.SECONDS);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+        };
+        var running = new Thread(sync::syncNow);
+        running.start();
+        assertThat(entered.await(5, TimeUnit.SECONDS)).isTrue();
+        try {
+            assertTimeoutPreemptively(Duration.ofMillis(500), sync::requestSync);
+        } finally {
+            release.countDown();
+            running.join(5000);
+            sync.shutdown();
+        }
+    }
+
+    @Test
+    void unexpectedErrorForOnePersonDoesNotStopOthers() {
+        fake.failUnexpected = true; // Олександр (synced first) breaks
+        var mariaGateway = new FakeCalendarGateway();
+        gateways.put(maria.id(), mariaGateway);
+        medicines.create(med(maria.id(), d("2026-10-13"), new Course.Fixed(1, DAYS),
+                new Schedule.Daily(List.of(t("20:00")))));
+        var r = sync.syncNow();
+        assertThat(r.failed()).isPositive();
+        assertThat(mariaGateway.events).hasSize(1);
+        assertThat(doseRepo.findNeedingSync(oleksandr.id())).hasSize(2);
     }
 }

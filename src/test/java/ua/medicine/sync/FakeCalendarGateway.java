@@ -13,6 +13,9 @@ class FakeCalendarGateway implements CalendarGateway {
     int deletes;
     boolean failAuth;
     boolean failIo;
+    boolean failUnexpected;
+    Runnable onInsert = () -> {
+    };
     private int nextId;
 
     @Override
@@ -24,6 +27,7 @@ class FakeCalendarGateway implements CalendarGateway {
     @Override
     public String insertEvent(String calendarId, CalendarEvent e) {
         check();
+        onInsert.run();
         inserts++;
         String id = "ev" + (++nextId);
         events.put(id, e);
@@ -51,6 +55,9 @@ class FakeCalendarGateway implements CalendarGateway {
     private void check() {
         if (failAuth) {
             throw new AuthRequiredException("revoked");
+        }
+        if (failUnexpected) {
+            throw new IllegalStateException("boom");
         }
         if (failIo) {
             throw new UncheckedIOException(new IOException("offline"));

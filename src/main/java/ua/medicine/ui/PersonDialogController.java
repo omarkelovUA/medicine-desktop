@@ -87,8 +87,9 @@ public final class PersonDialogController {
                     return;
                 }
                 try {
-                    ctx.personService().delete(existing.id());
+                    // token first: SQLite may reuse the id for the next new person
                     ctx.googleAuth().forget(existing.id());
+                    ctx.personService().delete(existing.id());
                 } catch (PersonHasMedicinesException ex) {
                     Dialogs.error(pane.getScene().getWindow(), Messages.get("error.personHasMedicines"));
                     e.consume();

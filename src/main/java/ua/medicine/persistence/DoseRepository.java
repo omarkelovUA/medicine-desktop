@@ -104,19 +104,42 @@ public final class DoseRepository {
                 WHERE sync_state='CLEAN' AND medicine_id IN (SELECT id FROM medicine WHERE person_id=?)""", personId);
     }
 
-    /** After unlinking Google: forget event ids and drop rows only waiting for a remote delete. */
-    public void resetSyncForPerson(long personId) {
-        db.run(c -> {
-            try (var drop = prepare(c, """
-                    DELETE FROM dose WHERE sync_state='DELETE_PENDING'
-                    AND medicine_id IN (SELECT id FROM medicine WHERE person_id=?)""", personId);
-                 var reset = prepare(c, """
-                    UPDATE dose SET calendar_event_id=NULL, sync_state='DIRTY'
-                    WHERE medicine_id IN (SELECT id FROM medicine WHERE person_id=?)""", personId)) {
-                drop.executeUpdate();
-                reset.executeUpdate();
+    // Targeted single-statement writes: the UI thread and the sync thread both write doses,
+    // so each change touches only its own columns and never writes back a stale row.
+
+    /** Sets taken_at unless the dose is already taken. */
+    public void markTaken(long id, LocalDateTime at) {
+        execute("UPDATE dose SET taken_at=?, missed=0, sync_state='DIRTY' WHERE id=? AND taken_at IS NULL",
+                text(at), id);
+    }
+
+    public void unmarkTaken(long id) {
+        execute("UPDATE dose SET taken_at=NULL, sync_state='DIRTY' WHERE id=? AND" + VISIBLE, id);
+    }
+
+    /** Marks not-taken doses before {@code t} as missed; returns how many changed. */
+    public int markMissedBefore(LocalDateTime t) {
+        return db.tx(c -> {
+            try (var st = prepare(c, "UPDATE dose SET missed=1 WHERE taken_at IS NULL AND missed=0 AND scheduled_at<? AND"
+                    + VISIBLE, text(t))) {
+                return st.executeUpdate();
             }
         });
+    }
+
+    public void setSyncState(long id, SyncState state) {
+        execute("UPDATE dose SET sync_state=? WHERE id=?", state.name(), id);
+    }
+
+    /**
+     * Stores the calendar event id of a pushed dose. It becomes CLEAN only if nothing changed since it was
+     * read for the push ({@code pushedTakenAt}, {@code pushedState}); otherwise it stays as it is.
+     */
+    public void recordPushed(long id, String eventId, LocalDateTime pushedTakenAt, SyncState pushedState) {
+        execute("""
+                UPDATE dose SET calendar_event_id=?,
+                       sync_state = CASE WHEN taken_at IS ? AND sync_state=? THEN 'CLEAN' ELSE sync_state END
+                WHERE id=?""", eventId, text(pushedTakenAt), pushedState.name(), id);
     }
 
     public void delete(long id) {

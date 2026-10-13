@@ -15,7 +15,6 @@ import java.io.UncheckedIOException;
 import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -38,6 +37,7 @@ public final class CalendarSyncService implements SyncTrigger {
         t.setDaemon(true);
         return t;
     });
+    private final Object pendingLock = new Object();
     private ScheduledFuture<?> pending;
     private volatile Consumer<SyncResult> listener = r -> {
     };
@@ -54,12 +54,15 @@ public final class CalendarSyncService implements SyncTrigger {
         this.listener = listener;
     }
 
+    /** Never blocks: callers are on the UI thread while a sync may be talking to Google. */
     @Override
-    public synchronized void requestSync() {
-        if (pending != null) {
-            pending.cancel(false);
+    public void requestSync() {
+        synchronized (pendingLock) {
+            if (pending != null) {
+                pending.cancel(false);
+            }
+            pending = executor.schedule(this::runAndNotify, DEBOUNCE_MS, TimeUnit.MILLISECONDS);
         }
-        pending = executor.schedule(this::runAndNotify, DEBOUNCE_MS, TimeUnit.MILLISECONDS);
     }
 
     private void runAndNotify() {
@@ -115,6 +118,10 @@ public final class CalendarSyncService implements SyncTrigger {
                 authFailed.add(person.id());
                 lastError = e.getMessage();
                 log.warn("Google authorization needed for person {}: {}", person.id(), e.getMessage());
+            } catch (RuntimeException e) {
+                failed++;
+                lastError = e.getMessage();
+                log.error("Sync for person {} failed", person.id(), e);
             }
         }
         return new SyncResult(pushed, deleted, failed, authFailed, lastError);
@@ -146,12 +153,7 @@ public final class CalendarSyncService implements SyncTrigger {
 
     /** Stores the event id; stays DIRTY if the dose changed while it was being pushed. */
     private void markClean(DoseOccurrence pushedDose, String eventId) {
-        doses.findById(pushedDose.id()).ifPresent(current -> {
-            boolean unchanged = Objects.equals(current.takenAt(), pushedDose.takenAt())
-                    && current.syncState() == pushedDose.syncState();
-            doses.update(current.withCalendarEventId(eventId)
-                    .withSyncState(unchanged ? SyncState.CLEAN : current.syncState()));
-        });
+        doses.recordPushed(pushedDose.id(), eventId, pushedDose.takenAt(), pushedDose.syncState());
     }
 
     public void shutdown() {

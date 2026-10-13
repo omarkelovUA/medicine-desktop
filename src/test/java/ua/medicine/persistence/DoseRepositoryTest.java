@@ -87,23 +87,47 @@ class DoseRepositoryTest {
     }
 
     @Test
-    void resetSyncForPersonClearsEventIds() {
+    void recordPushedKeepsTickMadeDuringPush() {
         doses.insertAll(List.of(planned(mid, dt("2026-10-13T08:00"))));
-        var d = day13().getFirst();
-        doses.update(d.withCalendarEventId("ev").withSyncState(CLEAN));
-        doses.resetSyncForPerson(pid);
-        var after = doses.findById(d.id()).orElseThrow();
-        assertThat(after.calendarEventId()).isNull();
+        var pushed = day13().getFirst(); // DIRTY, not taken
+        doses.markTaken(pushed.id(), dt("2026-10-13T08:03"));
+        doses.recordPushed(pushed.id(), "ev", pushed.takenAt(), pushed.syncState());
+        var after = doses.findById(pushed.id()).orElseThrow();
+        assertThat(after.takenAt()).isEqualTo(dt("2026-10-13T08:03"));
+        assertThat(after.syncState()).isEqualTo(DIRTY);
+        assertThat(after.calendarEventId()).isEqualTo("ev");
+    }
+
+    @Test
+    void recordPushedMarksCleanWhenUnchanged() {
+        doses.insertAll(List.of(planned(mid, dt("2026-10-13T08:00"))));
+        var pushed = day13().getFirst();
+        doses.recordPushed(pushed.id(), "ev", pushed.takenAt(), pushed.syncState());
+        assertThat(doses.findById(pushed.id()).orElseThrow().syncState()).isEqualTo(CLEAN);
+    }
+
+    @Test
+    void markTakenAndMissedKeepEventId() {
+        doses.insertAll(List.of(planned(mid, dt("2026-10-13T08:00")), planned(mid, dt("2026-10-12T08:00"))));
+        var today = day13().getFirst();
+        doses.recordPushed(today.id(), "ev", null, DIRTY);
+        doses.markTaken(today.id(), dt("2026-10-13T08:03"));
+        assertThat(doses.findById(today.id()).orElseThrow().calendarEventId()).isEqualTo("ev");
+        assertThat(doses.markMissedBefore(dt("2026-10-13T00:00"))).isEqualTo(1);
+        doses.unmarkTaken(today.id());
+        var after = doses.findById(today.id()).orElseThrow();
+        assertThat(after.takenAt()).isNull();
+        assertThat(after.calendarEventId()).isEqualTo("ev");
         assertThat(after.syncState()).isEqualTo(DIRTY);
     }
 
     @Test
-    void resetSyncForPersonDropsDeletePendingRows() {
+    void markTakenDoesNotOverwriteEarlierTick() {
         doses.insertAll(List.of(planned(mid, dt("2026-10-13T08:00"))));
         var d = day13().getFirst();
-        doses.update(d.withCalendarEventId("ev").withSyncState(DELETE_PENDING));
-        doses.resetSyncForPerson(pid);
-        assertThat(doses.findById(d.id())).isEmpty();
+        doses.markTaken(d.id(), dt("2026-10-13T08:03"));
+        doses.markTaken(d.id(), dt("2026-10-13T09:00"));
+        assertThat(doses.findById(d.id()).orElseThrow().takenAt()).isEqualTo(dt("2026-10-13T08:03"));
     }
 
     @Test

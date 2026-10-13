@@ -47,7 +47,7 @@ public final class MedicineService {
         Set<LocalDateTime> wantedSet = new HashSet<>(wanted);
         for (DoseOccurrence existing : doses.findFutureUntaken(saved.id(), now)) {
             if (wantedSet.contains(existing.scheduledAt())) {
-                doses.update(existing.withSyncState(SyncState.DIRTY));
+                doses.setSyncState(existing.id(), SyncState.DIRTY);
             } else if (existing.syncState() != SyncState.DELETE_PENDING) {
                 remove(existing);
             }
@@ -97,7 +97,7 @@ public final class MedicineService {
 
     private void remove(DoseOccurrence dose) {
         if (dose.calendarEventId() != null) {
-            doses.update(dose.withSyncState(SyncState.DELETE_PENDING));
+            doses.setSyncState(dose.id(), SyncState.DELETE_PENDING);
         } else {
             doses.delete(dose.id());
         }

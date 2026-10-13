@@ -17,7 +17,6 @@ import javafx.stage.Window;
 import ua.medicine.AppContext;
 import ua.medicine.domain.Medicine;
 import ua.medicine.domain.Person;
-import ua.medicine.i18n.Formats;
 import ua.medicine.i18n.Messages;
 import ua.medicine.sync.SyncResult;
 
@@ -33,6 +32,8 @@ import java.util.stream.Collectors;
 
 /** Main window: person tabs and medicine cards. */
 public final class DashboardController {
+
+    private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(DashboardController.class);
 
     private final AppContext ctx;
     private final Set<Long> authFailedPersonIds = new HashSet<>();
@@ -204,9 +205,8 @@ public final class DashboardController {
         Set<Long> before = Set.copyOf(authFailedPersonIds);
         authFailedPersonIds.clear();
         authFailedPersonIds.addAll(result.authFailedPersonIds());
-        statusLabel.setText(result.lastError() == null
-                ? Messages.get("sync.ok", Formats.time(LocalTime.now(ctx.clock())))
-                : Messages.get("sync.error", result.lastError()));
+        boolean anyoneLinked = ctx.personService().all().stream().anyMatch(Person::googleLinked);
+        statusLabel.setText(SyncStatus.text(result, LocalTime.now(ctx.clock()), anyoneLinked));
         if (!before.equals(authFailedPersonIds)) {
             refresh();
         }
@@ -273,6 +273,7 @@ public final class DashboardController {
         }
         googleButton.setDisable(true);
         googleButton.setText("…");
+        ctx.googleAuth().cancelPendingAuthorization(); // a previous, abandoned sign-in
         ctx.io().submit(() -> {
             try {
                 ctx.googleLink().link(p.id());
@@ -282,7 +283,8 @@ public final class DashboardController {
                 });
             } catch (RuntimeException e) {
                 Platform.runLater(() -> {
-                    Dialogs.error(window(), Messages.get("sync.error", e.getMessage()));
+                    log.warn("Linking Google for person {} failed", p.id(), e);
+                    Dialogs.error(window(), Messages.get("google.linkFailed"));
                     refresh();
                 });
             }
