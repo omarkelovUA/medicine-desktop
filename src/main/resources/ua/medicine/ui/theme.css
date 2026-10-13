@@ -9,6 +9,7 @@
     -taken-bg: #e7f3ec;
     -overdue-bg: #fdecec;
     -swatch-ring: #222222;
+    -weekend: #f0f2f5;
     -fx-font-family: "Noto Sans", "DejaVu Sans", sans-serif;
     -fx-font-size: 13px;
 }
@@ -206,4 +207,74 @@
 .tab-warning {
     -fx-text-fill: -danger;
     -fx-font-weight: bold;
+}
+
+.segmented .toggle-button {
+    -fx-background-radius: 0;
+}
+
+.segmented .toggle-button.first {
+    -fx-background-radius: 4 0 0 4;
+}
+
+.segmented .toggle-button.last {
+    -fx-background-radius: 0 4 4 0;
+}
+
+.timeline-toolbar {
+    -fx-padding: 8 16 8 16;
+}
+
+.timeline-range {
+    -fx-font-weight: bold;
+}
+
+.timeline-header {
+    -fx-background-color: -surface;
+    -fx-border-color: transparent transparent -border transparent;
+}
+
+.timeline-column-head .label {
+    -fx-font-size: 11px;
+}
+
+.timeline-row {
+    -fx-border-color: transparent transparent -border transparent;
+}
+
+.timeline-name {
+    -fx-padding: 0 8 0 16;
+}
+
+.timeline-group {
+    -fx-background-color: -hover;
+    -fx-font-weight: bold;
+    -fx-padding: 0 8 0 16;
+}
+
+.timeline-column {
+    -fx-border-color: transparent transparent transparent -border;
+}
+
+.timeline-weekend {
+    -fx-background-color: -weekend;
+}
+
+.timeline-today {
+    -fx-background-color: -danger;
+}
+
+.timeline-bar, .timeline-bar-label {
+    -fx-cursor: hand;
+}
+
+.timeline-bar-label {
+    -fx-text-fill: white;
+    -fx-font-weight: bold;
+    -fx-font-size: 12px;
+}
+
+.timeline-bar-label:outside {
+    -fx-text-fill: -muted;
+    -fx-font-weight: normal;
 }
