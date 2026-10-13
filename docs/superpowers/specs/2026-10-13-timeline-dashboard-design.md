@@ -24,7 +24,7 @@ Purpose: see at a glance which courses run when — past, current and planned �
 | Zoom | Column | Visible span | Range start for anchor date `d` | Range label |
 |---|---|---|---|---|
 | Дні | 1 day | 1 calendar month | 1st of `d`'s month | `жовтень 2026` |
-| Тижні | Mon–Sun week | 13 weeks | Monday of `d`'s week, minus 2 weeks | `29 вер – 28 груд 2026` |
+| Тижні | Mon–Sun week | 13 weeks | Monday of `d`'s week, minus 2 weeks | `28 вер – 27 груд 2026` |
 | Місяці | 1 month | 12 months | 1st of `d`'s month, minus 2 months | `серп 2026 – лип 2027` |
 | Квартали | 1 quarter | 8 quarters | 1st day of `d`'s quarter, minus 1 quarter | `III кв. 2026 – II кв. 2028` |
 | Роки | 1 year | 5 years | 1 Jan of `d`'s year, minus 1 year | `2025 – 2029` |
@@ -48,7 +48,8 @@ Purpose: see at a glance which courses run when — past, current and planned �
 - Bars cut by the range edge get a flat edge; an ongoing course (`Постійно`) that runs past the right edge shows `→`.
 - Tooltip: `Назва — дозування`, `13.10.2026 – 22.10.2026` or `з 13.10.2026 · Постійно`.
 - Click on a bar opens the existing medicine edit dialog; after it closes the timeline refreshes.
-- Empty state: the existing «немає ліків» messages when there are no persons / no medicines in range.
+- Empty state: the existing «немає осіб» message when there are no persons; a new
+  «Немає ліків у цьому періоді» when no course overlaps the visible range (the toolbar stays, so you can navigate).
 
 ### Theming
 All colours come from theme tokens (`-surface`, `-border`, `-muted`, `-hover`, `-danger` for the today line, a new
@@ -77,8 +78,9 @@ and the quarter format.
 - A `VBox`: toolbar, then a `ScrollPane` (vertical only) holding header + rows.
 - Rows area: left name column of fixed width; right area is a `Pane` whose children (column stripes, bars, today line)
   are laid out in `layoutChildren()` from `TimeScale.fraction(...)` × the current width, so it follows window resizes.
-- API: `TimelineView(Consumer<Medicine> onOpen, Settings settings)`, `void show(List<Row> rows, LocalDate today)`
-  where `Row` is either a person header or a medicine (with optional owner).
+- API: `TimelineView(Settings settings, Consumer<Medicine> onOpen)`,
+  `void show(List<Person> persons, List<Medicine> medicines, boolean grouped, LocalDate today)`; the visible rows
+  (person headers and medicines) are chosen by a pure `TimelineRows.build(...)` helper.
 - The view owns its `TimeScale` state; zoom changes write `settings.setTimelineZoom(...)`.
 
 ### `DashboardController`
