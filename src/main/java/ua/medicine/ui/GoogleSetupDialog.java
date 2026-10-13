@@ -32,7 +32,6 @@ final class GoogleSetupDialog {
         dialog.setTitle(Messages.get("google.setup.title"));
         dialog.setHeaderText(null);
         var pane = dialog.getDialogPane();
-        pane.getStylesheets().add(GoogleSetupDialog.class.getResource("theme.css").toExternalForm());
         var choose = new ButtonType(Messages.get("google.setup.chooseFile"), ButtonBar.ButtonData.OK_DONE);
         var cancel = new ButtonType(Messages.get("btn.cancel"), ButtonBar.ButtonData.CANCEL_CLOSE);
         pane.getButtonTypes().addAll(choose, cancel);

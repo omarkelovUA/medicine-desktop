@@ -32,9 +32,10 @@ final class ColorPicker extends HBox {
     private void render() {
         getChildren().forEach(n -> {
             var circle = (Circle) n;
-            boolean on = circle.getUserData().equals(selected);
-            circle.setStroke(on ? Color.web("#222") : Color.TRANSPARENT);
-            circle.setStrokeWidth(on ? 3 : 0);
+            circle.getStyleClass().remove("selected");
+            if (circle.getUserData().equals(selected)) {
+                circle.getStyleClass().add("selected");
+            }
         });
     }
 }

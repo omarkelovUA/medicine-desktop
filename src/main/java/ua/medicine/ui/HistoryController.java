@@ -58,7 +58,6 @@ public final class HistoryController {
         stage.initOwner(owner);
         stage.setTitle(Messages.get("history.title"));
         var scene = new Scene(controller.build(), 900, 640);
-        scene.getStylesheets().add(HistoryController.class.getResource("theme.css").toExternalForm());
         stage.setScene(scene);
         stage.show();
     }

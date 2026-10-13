@@ -25,6 +25,8 @@ final class Steps {
                 later(300, () -> clickButton(app.dashboard().stage(), "Підключити Google"));
             },
             "history", app -> clickButton(app.dashboard().stage(), "Історія"),
+            "themeLight", app -> ((javafx.scene.control.MenuButton) app.dashboard().root().lookup("#themeMenu"))
+                    .getItems().get(1).fire(),
             "addMedicine", app -> fire(app.dashboard().root().lookup("#addMedicineButton")),
             "addMedicineSave", app -> {
                 later(600, () -> {

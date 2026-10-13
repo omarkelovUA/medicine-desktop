@@ -188,7 +188,6 @@ public final class MedicineDialogController {
         dialog.setTitle(Messages.get(existing == null ? "dialog.medicine.new" : "dialog.medicine.edit"));
         dialog.setHeaderText(null);
         var pane = dialog.getDialogPane();
-        pane.getStylesheets().add(getClass().getResource("theme.css").toExternalForm());
         var save = new ButtonType(Messages.get("btn.save"), ButtonBar.ButtonData.OK_DONE);
         var cancel = new ButtonType(Messages.get("btn.cancel"), ButtonBar.ButtonData.CANCEL_CLOSE);
         pane.getButtonTypes().addAll(save, cancel);

@@ -27,6 +27,10 @@ public record AppPaths(Path base) {
         return base.resolve("tokens");
     }
 
+    public Path settings() {
+        return base.resolve("settings.properties");
+    }
+
     public Path clientSecret() {
         return base.resolve("client_secret.json");
     }

@@ -6,6 +6,8 @@ import javafx.geometry.Pos;
 import javafx.scene.control.Button;
 import javafx.scene.control.CheckBox;
 import javafx.scene.control.Label;
+import javafx.scene.control.MenuButton;
+import javafx.scene.control.RadioMenuItem;
 import javafx.scene.control.ToggleButton;
 import javafx.scene.control.ToggleGroup;
 import javafx.scene.control.Tooltip;
@@ -36,6 +38,7 @@ public final class DashboardController {
     private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(DashboardController.class);
 
     private final AppContext ctx;
+    private final Theme theme;
     private final Set<Long> authFailedPersonIds = new HashSet<>();
     private final NotificationPane notifications = new NotificationPane();
     private Long selectedPersonId; // null = "Усі"
@@ -43,6 +46,8 @@ public final class DashboardController {
 
     @FXML
     private StackPane root;
+    @FXML
+    private MenuButton themeMenu;
     @FXML
     private HBox tabBar;
     @FXML
@@ -58,14 +63,16 @@ public final class DashboardController {
     @FXML
     private Label statusLabel;
 
-    public DashboardController(AppContext ctx) {
+    public DashboardController(AppContext ctx, Theme theme) {
         this.ctx = ctx;
+        this.theme = theme;
     }
 
     public void start(Stage stage) {
         this.stage = stage;
         StackPane.setAlignment(notifications, Pos.BOTTOM_RIGHT);
         root.getChildren().add(notifications);
+        buildThemeMenu();
         ctx.sync().setListener(result -> Platform.runLater(() -> onSyncResult(result)));
         refresh();
     }
@@ -99,6 +106,17 @@ public final class DashboardController {
             buildCards(persons);
         } catch (RuntimeException e) {
             Dialogs.dbError(window(), e);
+        }
+    }
+
+    private void buildThemeMenu() {
+        var group = new ToggleGroup();
+        for (ThemeMode mode : ThemeMode.values()) {
+            var item = new RadioMenuItem(Messages.get(mode.messageKey()));
+            item.setToggleGroup(group);
+            item.setSelected(mode == theme.mode());
+            item.setOnAction(e -> theme.setMode(mode));
+            themeMenu.getItems().add(item);
         }
     }
 

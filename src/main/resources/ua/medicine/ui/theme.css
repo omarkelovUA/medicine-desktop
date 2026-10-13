@@ -3,17 +3,23 @@
     -danger: #d33a3a;
     -muted: #6b7280;
     -border: #d9dde3;
+    -app-bg: #f6f7f9;
+    -surface: white;
+    -hover: #eef1f4;
+    -taken-bg: #e7f3ec;
+    -overdue-bg: #fdecec;
+    -swatch-ring: #222222;
     -fx-font-family: "Noto Sans", "DejaVu Sans", sans-serif;
     -fx-font-size: 13px;
 }
 
 .app-root {
-    -fx-background-color: #f6f7f9;
+    -fx-background-color: -app-bg;
 }
 
 .header {
     -fx-padding: 10 16 10 16;
-    -fx-background-color: white;
+    -fx-background-color: -surface;
     -fx-border-color: transparent transparent -border transparent;
 }
 
@@ -30,7 +36,7 @@
 
 .tab-bar {
     -fx-padding: 8 16 0 16;
-    -fx-background-color: white;
+    -fx-background-color: -surface;
     -fx-border-color: transparent transparent -border transparent;
 }
 
@@ -43,7 +49,7 @@
 }
 
 .person-tab:hover {
-    -fx-background-color: #eef1f4;
+    -fx-background-color: -hover;
 }
 
 .person-tab:selected {
@@ -77,7 +83,7 @@
 }
 
 .medicine-card {
-    -fx-background-color: white;
+    -fx-background-color: -surface;
     -fx-background-radius: 10;
     -fx-border-color: -border;
     -fx-border-radius: 10;
@@ -118,13 +124,13 @@
 }
 
 .dose-chip.dose-taken {
-    -fx-background-color: #e7f3ec;
+    -fx-background-color: -taken-bg;
 }
 
 .dose-chip.dose-overdue {
     -fx-border-color: -danger;
     -fx-text-fill: -danger;
-    -fx-background-color: #fdecec;
+    -fx-background-color: -overdue-bg;
 }
 
 .dose-chip.dose-missed {
@@ -139,7 +145,7 @@
 
 .status-bar {
     -fx-padding: 4 16 4 16;
-    -fx-background-color: white;
+    -fx-background-color: -surface;
     -fx-border-color: -border transparent transparent transparent;
 }
 
@@ -155,10 +161,16 @@
 
 .color-swatch {
     -fx-cursor: hand;
+    -fx-stroke-width: 0;
+}
+
+.color-swatch.selected {
+    -fx-stroke: -swatch-ring;
+    -fx-stroke-width: 3;
 }
 
 .notification {
-    -fx-background-color: white;
+    -fx-background-color: -surface;
     -fx-background-radius: 10;
     -fx-border-color: -accent;
     -fx-border-radius: 10;
@@ -169,7 +181,7 @@
 }
 
 .history-tile {
-    -fx-background-color: white;
+    -fx-background-color: -surface;
     -fx-background-radius: 8;
     -fx-border-color: -border;
     -fx-border-radius: 8;

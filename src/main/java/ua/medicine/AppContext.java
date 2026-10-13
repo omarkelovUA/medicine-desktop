@@ -22,6 +22,7 @@ import java.util.concurrent.Executors;
 public final class AppContext implements AutoCloseable {
 
     private final AppPaths paths;
+    private final Settings settings;
     private final Clock clock = Clock.systemDefaultZone();
     private final Database database;
     private final PersonRepository personRepository;
@@ -43,6 +44,7 @@ public final class AppContext implements AutoCloseable {
 
     public AppContext(AppPaths paths) {
         this.paths = paths;
+        settings = new Settings(paths.settings());
         database = new Database("jdbc:sqlite:" + paths.db());
         database.migrate();
         personRepository = new PersonRepository(database);
@@ -61,6 +63,10 @@ public final class AppContext implements AutoCloseable {
 
     public AppPaths paths() {
         return paths;
+    }
+
+    public Settings settings() {
+        return settings;
     }
 
     public Clock clock() {

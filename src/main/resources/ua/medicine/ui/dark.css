@@ -1,0 +1,30 @@
+/* Dark overrides, loaded after theme.css. Modena derives control and text colours from -fx-base / -fx-background. */
+.root {
+    -fx-base: #33373e;
+    -fx-background: #1d2025;
+    -fx-control-inner-background: #262a30;
+    -fx-control-inner-background-alt: #2b2f36;
+    -fx-accent: #3f9e74;
+    -fx-focus-color: #4fb386;
+    -fx-faint-focus-color: #4fb38633;
+    -fx-selection-bar-non-focused: #3a3f47;
+
+    -accent: #3f9e74;
+    -danger: #f06a6a;
+    -muted: #9aa3af;
+    -border: #3a3f47;
+    -app-bg: #1d2025;
+    -surface: #262a30;
+    -hover: #30353c;
+    -taken-bg: #1f3a2d;
+    -overdue-bg: #43262a;
+    -swatch-ring: #f2f4f7;
+}
+
+.notification {
+    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.6), 14, 0, 0, 3);
+}
+
+.course-progress .track {
+    -fx-background-color: #3a3f47;
+}

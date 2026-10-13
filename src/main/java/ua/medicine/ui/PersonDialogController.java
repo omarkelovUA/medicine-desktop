@@ -29,7 +29,6 @@ public final class PersonDialogController {
         dialog.setTitle(Messages.get(existing == null ? "dialog.person.new" : "dialog.person.edit"));
         dialog.setHeaderText(null);
         var pane = dialog.getDialogPane();
-        pane.getStylesheets().add(PersonDialogController.class.getResource("theme.css").toExternalForm());
         var save = new ButtonType(Messages.get("btn.save"), ButtonBar.ButtonData.OK_DONE);
         var cancel = new ButtonType(Messages.get("btn.cancel"), ButtonBar.ButtonData.CANCEL_CLOSE);
         var delete = new ButtonType(Messages.get("btn.delete"), ButtonBar.ButtonData.LEFT);
