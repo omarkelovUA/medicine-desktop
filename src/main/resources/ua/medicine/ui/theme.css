@@ -254,7 +254,6 @@
 .timeline-group {
     -fx-background-color: -hover;
     -fx-font-weight: bold;
-    -fx-padding: 0 8 0 16;
 }
 
 .timeline-column {
@@ -281,5 +280,4 @@
 
 .timeline-bar-label:outside {
     -fx-text-fill: -muted;
-    -fx-font-weight: normal;
 }

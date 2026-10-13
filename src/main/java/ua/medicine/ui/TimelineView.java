@@ -68,6 +68,7 @@ final class TimelineView extends VBox {
         this.persons = List.copyOf(persons);
         this.medicines = List.copyOf(medicines);
         this.grouped = grouped;
+        scale = scale.followToday(this.today, today); // a new day moves the view unless the user navigated away
         this.today = today;
         render();
     }
@@ -110,7 +111,7 @@ final class TimelineView extends VBox {
         group.selectedToggleProperty().addListener((o, old, now) -> {
             if (now != null && now.getUserData() != scale.zoom()) {
                 Zoom z = (Zoom) now.getUserData();
-                scale = TimeScale.around(z, scale.contains(today) ? today : scale.start());
+                scale = scale.withZoom(z);
                 settings.setTimelineZoom(z);
                 render();
             }
@@ -181,13 +182,13 @@ final class TimelineView extends VBox {
     }
 
     private HBox groupRow(Person person) {
-        var name = new Label(person.name());
-        var box = new HBox(6, new Avatar(person, 9), name);
-        box.setAlignment(Pos.CENTER_LEFT);
-        box.getStyleClass().add("timeline-group");
-        box.setMinHeight(GROUP_HEIGHT);
-        box.setPrefHeight(GROUP_HEIGHT);
-        return box;
+        var nameCell = new HBox(6, new Avatar(person, 9), new Label(person.name()));
+        nameCell.setAlignment(Pos.CENTER_LEFT);
+        var track = gridTrack(); // keeps the column lines and today line running through the header
+        addToday(track);
+        var row = row(nameCell, track, GROUP_HEIGHT);
+        row.getStyleClass().add("timeline-group");
+        return row;
     }
 
     private HBox medicineRow(Medicine m) {

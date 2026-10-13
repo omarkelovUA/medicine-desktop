@@ -73,4 +73,28 @@ class TimeScaleTest {
         assertThat(s.contains(LocalDate.of(2026, 10, 1))).isTrue();
         assertThat(s.contains(LocalDate.of(2026, 11, 1))).isFalse();
     }
+
+    @Test
+    void zoomRoundTripKeepsThePlace() {
+        var navigated = TimeScale.around(Zoom.MONTHS, ANCHOR).next().next();
+        assertThat(navigated.withZoom(Zoom.WEEKS).withZoom(Zoom.MONTHS)).isEqualTo(navigated);
+        assertThat(navigated.withZoom(Zoom.DAYS).withZoom(Zoom.YEARS).withZoom(Zoom.MONTHS)).isEqualTo(navigated);
+    }
+
+    @Test
+    void daysSteppingFromMonthEndKeepsWholeMonths() {
+        var january = TimeScale.around(Zoom.DAYS, LocalDate.of(2026, 1, 31));
+        assertThat(january.next().start()).isEqualTo(LocalDate.of(2026, 2, 1));
+        assertThat(january.next().next().start()).isEqualTo(LocalDate.of(2026, 3, 1));
+    }
+
+    @Test
+    void followsTheNewDayUnlessNavigatedAway() {
+        var october = TimeScale.around(Zoom.DAYS, LocalDate.of(2026, 10, 31));
+        assertThat(october.followToday(LocalDate.of(2026, 10, 31), LocalDate.of(2026, 11, 1)).start())
+                .isEqualTo(LocalDate.of(2026, 11, 1));
+        var navigated = october.previous();
+        assertThat(navigated.followToday(LocalDate.of(2026, 10, 31), LocalDate.of(2026, 11, 1)))
+                .isEqualTo(navigated);
+    }
 }

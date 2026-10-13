@@ -37,10 +37,12 @@ public final class TimeScale {
     }
 
     private final Zoom zoom;
+    private final LocalDate anchor;
     private final LocalDate start;
 
-    private TimeScale(Zoom zoom, LocalDate start) {
+    private TimeScale(Zoom zoom, LocalDate anchor, LocalDate start) {
         this.zoom = zoom;
+        this.anchor = anchor;
         this.start = start;
     }
 
@@ -52,15 +54,26 @@ public final class TimeScale {
             case QUARTERS -> anchor.withDayOfMonth(1).withMonth((anchor.getMonthValue() - 1) / 3 * 3 + 1);
             case YEARS -> anchor.withDayOfYear(1);
         };
-        return new TimeScale(zoom, first.minus((long) zoom.leadIn * zoom.step(), zoom.unit));
+        return new TimeScale(zoom, anchor, first.minus((long) zoom.leadIn * zoom.step(), zoom.unit));
     }
 
+    /** The anchor moves by one span, so the range always stays aligned to its zoom. */
     public TimeScale previous() {
-        return new TimeScale(zoom, zoom == Zoom.DAYS ? start.minusMonths(1) : start.minus(span(), zoom.unit));
+        return around(zoom, shift(anchor, -1));
     }
 
     public TimeScale next() {
-        return new TimeScale(zoom, endExclusive());
+        return around(zoom, shift(anchor, 1));
+    }
+
+    /** The same place at another zoom: round trips through other zooms come back to this range. */
+    public TimeScale withZoom(Zoom zoom) {
+        return around(zoom, anchor);
+    }
+
+    /** Moves to {@code newToday} when the range was still the one around {@code oldToday}; else stays. */
+    public TimeScale followToday(LocalDate oldToday, LocalDate newToday) {
+        return equals(around(zoom, oldToday)) ? around(zoom, newToday) : this;
     }
 
     public Zoom zoom() {
@@ -95,6 +108,26 @@ public final class TimeScale {
 
     public boolean contains(LocalDate date) {
         return !date.isBefore(start) && date.isBefore(endExclusive());
+    }
+
+    /** Equal when they show the same range at the same zoom, whatever the anchor. */
+    @Override
+    public boolean equals(Object o) {
+        return o instanceof TimeScale t && t.zoom == zoom && t.start.equals(start);
+    }
+
+    @Override
+    public int hashCode() {
+        return zoom.hashCode() * 31 + start.hashCode();
+    }
+
+    @Override
+    public String toString() {
+        return zoom + " " + start + "–" + endExclusive();
+    }
+
+    private LocalDate shift(LocalDate date, int direction) {
+        return zoom == Zoom.DAYS ? date.plusMonths(direction) : date.plus(direction * span(), zoom.unit);
     }
 
     /** The whole range in {@code zoom.unit}s; DAYS spans one calendar month. */
