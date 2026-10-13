@@ -221,20 +221,65 @@ public final class DashboardController {
 
     @FXML
     private void addMedicine() {
+        List<Person> persons = ctx.personService().all();
+        if (persons.isEmpty()) {
+            Dialogs.error(window(), Messages.get("empty.noPersons"));
+            return;
+        }
+        MedicineDialogController.show(window(), ctx, null, selectedPersonId);
+        refresh();
     }
 
     private void editMedicine(Medicine medicine) {
+        MedicineDialogController.show(window(), ctx, medicine, medicine.personId());
+        refresh();
     }
 
     private void addPerson() {
+        PersonDialogController.show(window(), ctx, null).ifPresent(p -> selectedPersonId = p.id());
+        refresh();
     }
 
     @FXML
     private void editPerson() {
+        selectedPerson(ctx.personService().all()).ifPresent(p -> PersonDialogController.show(window(), ctx, p));
+        refresh();
     }
 
     @FXML
     private void toggleGoogle() {
+        Optional<Person> selected = selectedPerson(ctx.personService().all());
+        if (selected.isEmpty()) {
+            return;
+        }
+        Person p = selected.get();
+        if (p.googleLinked() && !authFailedPersonIds.contains(p.id())) {
+            if (Dialogs.confirm(window(), Messages.get("confirm.disconnect", p.name()))) {
+                try {
+                    ctx.googleLink().unlink(p.id());
+                } catch (RuntimeException e) {
+                    Dialogs.dbError(window(), e);
+                }
+                refresh();
+            }
+            return;
+        }
+        googleButton.setDisable(true);
+        googleButton.setText("…");
+        ctx.io().submit(() -> {
+            try {
+                ctx.googleLink().link(p.id());
+                Platform.runLater(() -> {
+                    authFailedPersonIds.remove(p.id());
+                    refresh();
+                });
+            } catch (RuntimeException e) {
+                Platform.runLater(() -> {
+                    Dialogs.error(window(), Messages.get("sync.error", e.getMessage()));
+                    refresh();
+                });
+            }
+        });
     }
 
     @FXML

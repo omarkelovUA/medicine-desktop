@@ -86,14 +86,14 @@ public final class SnapshotMain {
             Consumer<App> action = Steps.get(step);
             var first = new PauseTransition(Duration.millis(800));
             first.setOnFinished(e -> {
-                action.accept(this);
+                Platform.runLater(() -> action.accept(this));
                 var second = new PauseTransition(Duration.millis(1200));
                 second.setOnFinished(e2 -> {
                     int i = 0;
                     for (Window w : List.copyOf(Window.getWindows())) {
                         write(w.getScene(), outPrefix + "-" + (i++) + ".png");
                     }
-                    Platform.exit();
+                    Runtime.getRuntime().halt(0); // dev tool: skip shutdown while dialogs are open
                 });
                 second.play();
             });
