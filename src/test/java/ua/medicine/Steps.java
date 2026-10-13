@@ -19,6 +19,11 @@ final class Steps {
             "reminder", app -> app.dashboard().notifications().show(
                     new ua.medicine.service.Reminder(1, "Марія", "Амоксицилін", "500 мг", java.time.LocalTime.of(8, 0)),
                     r -> { }, r -> { }),
+            "googleSetup", app -> {
+                var tabs = app.dashboard().root().lookupAll(".person-tab").toArray(new Node[0]);
+                ((ButtonBase) tabs[1]).fire(); // first person's tab
+                later(300, () -> clickButton(app.dashboard().stage(), "Підключити Google"));
+            },
             "history", app -> clickButton(app.dashboard().stage(), "Історія"),
             "addMedicine", app -> fire(app.dashboard().root().lookup("#addMedicineButton")),
             "addMedicineSave", app -> {

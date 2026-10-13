@@ -149,7 +149,6 @@ public final class DashboardController {
         editPersonButton.setVisible(selected.isPresent());
         editPersonButton.setManaged(selected.isPresent());
         selected.ifPresent(p -> {
-            boolean secretPresent = ctx.googleAuth().clientSecretPresent();
             if (p.googleLinked() && authFailedPersonIds.contains(p.id())) {
                 googleButton.setText(Messages.get("google.reconnect"));
             } else if (p.googleLinked()) {
@@ -157,10 +156,7 @@ public final class DashboardController {
             } else {
                 googleButton.setText(Messages.get("google.connect"));
             }
-            boolean canLink = secretPresent || p.googleLinked();
-            googleButton.setDisable(!canLink);
-            googleButton.setTooltip(secretPresent ? null : new Tooltip(
-                    Messages.get("google.noClientSecret", ctx.googleAuth().clientSecretPath().getParent())));
+            googleButton.setDisable(false);
         });
     }
 
@@ -276,6 +272,9 @@ public final class DashboardController {
                 refresh();
             }
             return;
+        }
+        if (!ctx.googleAuth().clientSecretPresent() && !GoogleSetupDialog.show(window(), ctx)) {
+            return; // no OAuth client yet: the setup dialog explains how to get one
         }
         googleButton.setDisable(true);
         googleButton.setText("…");

@@ -12,6 +12,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class GoogleAuthServiceTest {
 
@@ -56,5 +57,25 @@ class GoogleAuthServiceTest {
 
         auth.cancelPendingAuthorization();
         assertThat(first).failsWithin(5, TimeUnit.SECONDS);
+    }
+
+    @Test
+    void importsValidDesktopClientSecret() throws Exception {
+        var auth = new GoogleAuthService(new AppPaths(home));
+        Path downloaded = Files.writeString(home.resolve("client_secret_123.apps.googleusercontent.com.json"), SECRET);
+        assertThat(auth.clientSecretPresent()).isFalse();
+        auth.importClientSecret(downloaded);
+        assertThat(auth.clientSecretPresent()).isTrue();
+        assertThat(Files.readString(home.resolve("client_secret.json"))).isEqualTo(SECRET);
+    }
+
+    @Test
+    void rejectsFileThatIsNotADesktopClientSecret() throws Exception {
+        var auth = new GoogleAuthService(new AppPaths(home));
+        Path web = Files.writeString(home.resolve("web.json"), "{\"web\":{\"client_id\":\"x\"}}");
+        Path junk = Files.writeString(home.resolve("junk.json"), "not json");
+        assertThatThrownBy(() -> auth.importClientSecret(web)).isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> auth.importClientSecret(junk)).isInstanceOf(IllegalArgumentException.class);
+        assertThat(auth.clientSecretPresent()).isFalse();
     }
 }

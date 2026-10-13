@@ -47,6 +47,32 @@ public final class GoogleAuthService {
         return Files.isRegularFile(paths.clientSecret());
     }
 
+    /**
+     * Copies an OAuth client JSON downloaded from Google Cloud Console into the data dir.
+     *
+     * @throws IllegalArgumentException if the file is not a "Desktop app" client
+     */
+    public void importClientSecret(Path downloaded) {
+        String json;
+        GoogleClientSecrets secrets;
+        try {
+            json = Files.readString(downloaded);
+            secrets = GoogleClientSecrets.load(JSON, new java.io.StringReader(json));
+        } catch (IOException | RuntimeException e) {
+            throw new IllegalArgumentException("Not a Google OAuth client file: " + downloaded, e);
+        }
+        var installed = secrets.getInstalled();
+        if (installed == null || installed.getClientId() == null || installed.getClientSecret() == null) {
+            throw new IllegalArgumentException("Not a Desktop app OAuth client: " + downloaded);
+        }
+        try {
+            Files.createDirectories(paths.clientSecret().getParent());
+            Files.writeString(paths.clientSecret(), json);
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
+    }
+
     public Path clientSecretPath() {
         return paths.clientSecret();
     }
@@ -141,6 +167,15 @@ public final class GoogleAuthService {
 
     private Path tokenDir(long personId) {
         return paths.tokens().resolve(String.valueOf(personId));
+    }
+
+    /** Opens a URL in the system browser; logs it if no browser can be started. */
+    public static void openUrl(String url) {
+        try {
+            openBrowser(url);
+        } catch (IOException e) {
+            log.warn("Open this URL in a browser: {}", url);
+        }
     }
 
     private static void openBrowser(String url) throws IOException {
