@@ -38,38 +38,52 @@ final class TimelineView extends VBox {
     private static final double ROW_HEIGHT = 34;
     private static final double GROUP_HEIGHT = 30;
     private static final double HEADER_HEIGHT = 40;
+    /** Below this column width a wrapped week label needs a third line, so the compact one is used. */
+    private static final double COMPACT_BELOW = 56;
 
     private final Settings settings;
     private final Consumer<Medicine> onOpen;
     private final Label range = new Label();
     private final VBox rows = new VBox();
+    private final ScrollPane scroll = new ScrollPane(rows);
+    private Node header;
+    private boolean rendered;
     private TimeScale scale;
     private List<Person> persons = List.of();
     private List<Medicine> medicines = List.of();
     private boolean grouped;
-    private LocalDate today = LocalDate.now();
+    private LocalDate today;
 
-    TimelineView(Settings settings, Consumer<Medicine> onOpen) {
+    TimelineView(Settings settings, LocalDate today, Consumer<Medicine> onOpen) {
         this.settings = settings;
         this.onOpen = onOpen;
+        this.today = today;
         scale = TimeScale.around(settings.timelineZoom(), today);
         getStyleClass().add("timeline");
         range.getStyleClass().add("timeline-range");
 
-        var scroll = new ScrollPane(rows);
         scroll.setFitToWidth(true);
         scroll.setHbarPolicy(ScrollPane.ScrollBarPolicy.NEVER);
-        scroll.getStyleClass().add("cards-scroll");
+        scroll.getStyleClass().addAll("cards-scroll", "timeline-scroll");
         VBox.setVgrow(scroll, Priority.ALWAYS);
+        // the column header stays in the rows (so its width matches them) but is pinned to the top on scroll
+        scroll.vvalueProperty().addListener(o -> pinHeader());
+        scroll.viewportBoundsProperty().addListener(o -> pinHeader());
+        rows.heightProperty().addListener(o -> pinHeader());
         getChildren().addAll(toolbar(), scroll);
     }
 
     void show(List<Person> persons, List<Medicine> medicines, boolean grouped, LocalDate today) {
+        TimeScale followed = scale.followToday(this.today, today); // a new day moves the view unless navigated away
+        if (rendered && followed.equals(scale) && today.equals(this.today) && grouped == this.grouped
+                && persons.equals(this.persons) && medicines.equals(this.medicines)) {
+            return; // the periodic refresh changed nothing: keep the nodes, so open tooltips and clicks survive
+        }
         this.persons = List.copyOf(persons);
         this.medicines = List.copyOf(medicines);
         this.grouped = grouped;
-        scale = scale.followToday(this.today, today); // a new day moves the view unless the user navigated away
         this.today = today;
+        scale = followed;
         render();
     }
 
@@ -132,14 +146,25 @@ final class TimelineView extends VBox {
         return bar;
     }
 
+    private void pinHeader() {
+        if (header != null) {
+            double hidden = Math.max(0, rows.getHeight() - scroll.getViewportBounds().getHeight());
+            header.setTranslateY(scroll.getVvalue() * hidden);
+        }
+    }
+
     private void move(TimeScale to) {
         scale = to;
         render();
     }
 
     private void render() {
+        rendered = true;
         range.setText(TimeLabels.range(scale));
-        rows.getChildren().setAll(header());
+        header = header();
+        header.setViewOrder(-1); // drawn over the rows it is pinned above
+        rows.getChildren().setAll(header);
+        pinHeader();
         List<TimelineRows.Row> list = TimelineRows.build(persons, medicines, grouped, scale);
         if (list.isEmpty()) {
             var empty = new Label(Messages.get("empty.noMedicinesInRange"));
@@ -161,7 +186,9 @@ final class TimelineView extends VBox {
         List<Column> columns = scale.columns();
         for (int i = 0; i < columns.size(); i++) {
             Column c = columns.get(i);
-            var main = new Label(TimeLabels.column(scale.zoom(), c));
+            String full = TimeLabels.column(scale.zoom(), c);
+            String compact = TimeLabels.columnCompact(scale.zoom(), c);
+            var main = new Label(full);
             main.setWrapText(true);
             main.setTextAlignment(TextAlignment.CENTER);
             main.setMinHeight(Region.USE_PREF_SIZE);
@@ -174,6 +201,10 @@ final class TimelineView extends VBox {
             }
             head.setAlignment(Pos.CENTER);
             head.getStyleClass().add("timeline-column-head");
+            if (!compact.equals(full)) {
+                head.widthProperty().addListener((o, old, w) ->
+                        main.setText(w.doubleValue() < COMPACT_BELOW ? compact : full));
+            }
             track.place(head, scale.fraction(c.start()), scale.fraction(c.endExclusive()), Kind.FILL);
         }
         var row = row(new Region(), track, HEADER_HEIGHT);
@@ -312,21 +343,11 @@ final class TimelineView extends VBox {
             }
         }
 
-        /** Inside the bar when it fits; otherwise beside it, on the right unless that runs off the track. */
         private void layoutLabel(Label label, double barX, double barW, double w, double h) {
-            double textW = label.prefWidth(-1);
             double textH = label.prefHeight(-1);
-            boolean inside = barW >= textW + 2 * LABEL_PAD;
-            label.pseudoClassStateChanged(OUTSIDE, !inside);
-            double x;
-            if (inside) {
-                x = barX + LABEL_PAD;
-            } else if (barX + barW + LABEL_PAD + textW <= w) {
-                x = barX + barW + LABEL_PAD;
-            } else {
-                x = Math.max(0, barX - LABEL_PAD - textW);
-            }
-            label.resizeRelocate(x, (h - textH) / 2, textW, textH);
+            var p = LabelPlacement.of(barX, barW, label.prefWidth(-1), w, LABEL_PAD);
+            label.pseudoClassStateChanged(OUTSIDE, !p.inside());
+            label.resizeRelocate(p.x(), (h - textH) / 2, p.width(), textH);
         }
 
         private static final javafx.css.PseudoClass OUTSIDE = javafx.css.PseudoClass.getPseudoClass("outside");

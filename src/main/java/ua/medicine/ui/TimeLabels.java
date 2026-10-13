@@ -16,6 +16,8 @@ final class TimeLabels {
     private static final String[] MONTHS_FULL = Messages.get("month.full").split(",");
     private static final String[] WEEKDAYS = Messages.get("weekday.short").split(",");
     private static final String[] ROMAN = {"I", "II", "III", "IV"};
+    private static final java.time.format.DateTimeFormatter COMPACT_WEEK =
+            java.time.format.DateTimeFormatter.ofPattern("dd.MM");
 
     private TimeLabels() {
     }
@@ -31,6 +33,11 @@ final class TimeLabels {
             case QUARTERS -> quarter(c.start());
             case YEARS -> String.valueOf(c.start().getYear());
         };
+    }
+
+    /** A shorter header for narrow columns: the week's Monday as {@code 28.09}; other zooms are already short. */
+    static String columnCompact(Zoom zoom, Column c) {
+        return zoom == Zoom.WEEKS ? COMPACT_WEEK.format(c.start()) : column(zoom, c);
     }
 
     static String columnSub(Zoom zoom, Column c, boolean first) {

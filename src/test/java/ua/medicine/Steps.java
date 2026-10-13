@@ -48,17 +48,28 @@ final class Steps {
     private Steps() {
     }
 
-    /** Also accepts {@code timeline:<ZOOM>[:<tab index>]}: opens that tab, the timeline and the zoom. */
+    /**
+     * Also accepts {@code timeline:<ZOOM>[:<tab index>[:<width>x<height>[:end]]]}: opens that tab (empty = «Усі»),
+     * the timeline and the zoom, resizes the window and scrolls the timeline to the bottom.
+     */
     static Consumer<App> get(String name) {
         if (name.startsWith("timeline:")) {
             String[] parts = name.split(":");
             return app -> {
                 var root = app.dashboard().root();
-                if (parts.length > 2) {
+                if (parts.length > 2 && !parts[2].isEmpty()) {
                     ((ButtonBase) root.lookupAll(".person-tab").toArray(new Node[0])[Integer.parseInt(parts[2])]).fire();
                 }
                 fireToggle(root, ua.medicine.i18n.Messages.get("view.timeline"));
                 fireToggle(root, ua.medicine.i18n.Messages.get("zoom." + parts[1]));
+                if (parts.length > 3) {
+                    String[] size = parts[3].split("x");
+                    app.dashboard().stage().setWidth(Double.parseDouble(size[0]));
+                    app.dashboard().stage().setHeight(Double.parseDouble(size[1]));
+                }
+                if (parts.length > 4 && parts[4].equals("end")) {
+                    later(400, () -> ((javafx.scene.control.ScrollPane) root.lookup(".timeline-scroll")).setVvalue(1));
+                }
             };
         }
         return STEPS.getOrDefault(name, app -> {

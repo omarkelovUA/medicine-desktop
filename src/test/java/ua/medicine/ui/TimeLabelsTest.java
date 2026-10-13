@@ -97,4 +97,12 @@ class TimeLabelsTest {
         assertThat(TimeLabels.tooltip(medicine("Амоксицилін", " ", new Course.Ongoing())))
                 .startsWith("Амоксицилін\n");
     }
+
+    @Test
+    void compactWeekColumnIsTheMondayDate() {
+        assertThat(TimeLabels.columnCompact(Zoom.WEEKS, col(LocalDate.of(2026, 9, 28), LocalDate.of(2026, 10, 5))))
+                .isEqualTo("28.09");
+        assertThat(TimeLabels.columnCompact(Zoom.MONTHS, col(LocalDate.of(2026, 10, 1), LocalDate.of(2026, 11, 1))))
+                .isEqualTo("жовт");
+    }
 }

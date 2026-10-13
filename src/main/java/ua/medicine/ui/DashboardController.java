@@ -83,7 +83,7 @@ public final class DashboardController {
         root.getChildren().add(notifications);
         buildThemeMenu();
         view = ctx.settings().dashboardView();
-        timeline = new TimelineView(ctx.settings(), this::editMedicine);
+        timeline = new TimelineView(ctx.settings(), LocalDate.now(ctx.clock()), this::editMedicine);
         center.getChildren().add(timeline);
         buildViewSwitch();
         ctx.sync().setListener(result -> Platform.runLater(() -> onSyncResult(result)));
