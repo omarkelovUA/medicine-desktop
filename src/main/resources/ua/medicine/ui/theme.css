@@ -221,6 +221,11 @@
     -fx-background-radius: 0 4 4 0;
 }
 
+.segmented .toggle-button:selected {
+    -fx-background-color: -accent;
+    -fx-text-fill: white;
+}
+
 .timeline-toolbar {
     -fx-padding: 8 16 8 16;
 }

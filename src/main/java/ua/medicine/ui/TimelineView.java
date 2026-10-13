@@ -72,19 +72,15 @@ final class TimelineView extends VBox {
         render();
     }
 
-    void resetToToday(LocalDate today) {
-        this.today = today;
-        scale = TimeScale.around(scale.zoom(), today);
-        render();
-    }
-
     /** Buttons that read as one control; exactly one stays selected. */
     static HBox segmented(List<ToggleButton> buttons, ToggleGroup group) {
         var box = new HBox();
         box.getStyleClass().add("segmented");
+        box.setMinWidth(Region.USE_PREF_SIZE);
         for (int i = 0; i < buttons.size(); i++) {
             var b = buttons.get(i);
             b.setToggleGroup(group);
+            b.setMinWidth(Region.USE_PREF_SIZE);
             if (i == 0) {
                 b.getStyleClass().add("first");
             }
@@ -160,20 +156,25 @@ final class TimelineView extends VBox {
 
     private HBox header() {
         var track = gridTrack();
+        addToday(track); // behind the labels
         List<Column> columns = scale.columns();
         for (int i = 0; i < columns.size(); i++) {
             Column c = columns.get(i);
             var main = new Label(TimeLabels.column(scale.zoom(), c));
             main.setWrapText(true);
             main.setTextAlignment(TextAlignment.CENTER);
-            var sub = new Label(TimeLabels.columnSub(scale.zoom(), c, i == 0));
-            sub.getStyleClass().add("muted");
-            var head = new VBox(main, sub);
+            main.setMinHeight(Region.USE_PREF_SIZE);
+            var head = new VBox(main);
+            String subText = TimeLabels.columnSub(scale.zoom(), c, i == 0);
+            if (!subText.isEmpty()) { // otherwise the main label may wrap into the second line
+                var sub = new Label(subText);
+                sub.getStyleClass().add("muted");
+                head.getChildren().add(sub);
+            }
             head.setAlignment(Pos.CENTER);
             head.getStyleClass().add("timeline-column-head");
             track.place(head, scale.fraction(c.start()), scale.fraction(c.endExclusive()), Kind.FILL);
         }
-        addToday(track);
         var row = row(new Region(), track, HEADER_HEIGHT);
         row.getStyleClass().add("timeline-header");
         return row;
@@ -197,6 +198,7 @@ final class TimelineView extends VBox {
         nameCell.setAlignment(Pos.CENTER_LEFT);
 
         var track = gridTrack();
+        addToday(track); // behind the bar and its label
         LocalDate endExclusive = m.endDate().map(end -> end.plusDays(1)).orElse(null);
         boolean cutLeft = m.startDate().isBefore(scale.start());
         boolean cutRight = endExclusive == null || endExclusive.isAfter(scale.endExclusive());
@@ -217,7 +219,6 @@ final class TimelineView extends VBox {
         }
         track.place(bar, from, to, Kind.BAR);
         track.place(label, from, to, Kind.LABEL);
-        addToday(track);
         var row = row(nameCell, track, ROW_HEIGHT);
         row.getStyleClass().add("timeline-row");
         return row;

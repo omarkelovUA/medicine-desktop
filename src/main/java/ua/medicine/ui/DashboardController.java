@@ -8,6 +8,7 @@ import javafx.scene.control.CheckBox;
 import javafx.scene.control.Label;
 import javafx.scene.control.MenuButton;
 import javafx.scene.control.RadioMenuItem;
+import javafx.scene.control.ScrollPane;
 import javafx.scene.control.ToggleButton;
 import javafx.scene.control.ToggleGroup;
 import javafx.scene.control.Tooltip;
@@ -42,6 +43,8 @@ public final class DashboardController {
     private final Set<Long> authFailedPersonIds = new HashSet<>();
     private final NotificationPane notifications = new NotificationPane();
     private Long selectedPersonId; // null = "Усі"
+    private DashboardView view = DashboardView.CARDS;
+    private TimelineView timeline;
     private Stage stage;
 
     @FXML
@@ -57,7 +60,13 @@ public final class DashboardController {
     @FXML
     private Button editPersonButton;
     @FXML
+    private HBox viewSwitch;
+    @FXML
     private CheckBox showFinished;
+    @FXML
+    private StackPane center;
+    @FXML
+    private ScrollPane cardsScroll;
     @FXML
     private FlowPane cards;
     @FXML
@@ -73,6 +82,10 @@ public final class DashboardController {
         StackPane.setAlignment(notifications, Pos.BOTTOM_RIGHT);
         root.getChildren().add(notifications);
         buildThemeMenu();
+        view = ctx.settings().dashboardView();
+        timeline = new TimelineView(ctx.settings(), this::editMedicine);
+        center.getChildren().add(timeline);
+        buildViewSwitch();
         ctx.sync().setListener(result -> Platform.runLater(() -> onSyncResult(result)));
         refresh();
     }
@@ -103,7 +116,18 @@ public final class DashboardController {
             }
             buildTabs(persons);
             buildPersonBar(persons);
-            buildCards(persons);
+            boolean timelineShown = view == DashboardView.TIMELINE && !persons.isEmpty();
+            show(cardsScroll, !timelineShown);
+            show(timeline, timelineShown);
+            show(showFinished, view == DashboardView.CARDS);
+            if (timelineShown) {
+                List<Medicine> medicines = selectedPersonId == null
+                        ? ctx.medicineRepository().findActive()
+                        : ctx.medicineRepository().findActiveByPerson(selectedPersonId);
+                timeline.show(persons, medicines, selectedPersonId == null, LocalDate.now(ctx.clock()));
+            } else {
+                buildCards(persons);
+            }
         } catch (RuntimeException e) {
             Dialogs.dbError(window(), e);
         }
@@ -118,6 +142,28 @@ public final class DashboardController {
             item.setOnAction(e -> theme.setMode(mode));
             themeMenu.getItems().add(item);
         }
+    }
+
+    private void buildViewSwitch() {
+        var cardsButton = new ToggleButton(Messages.get("view.cards"));
+        cardsButton.setUserData(DashboardView.CARDS);
+        var timelineButton = new ToggleButton(Messages.get("view.timeline"));
+        timelineButton.setUserData(DashboardView.TIMELINE);
+        var group = new ToggleGroup();
+        viewSwitch.getChildren().setAll(TimelineView.segmented(List.of(cardsButton, timelineButton), group));
+        (view == DashboardView.CARDS ? cardsButton : timelineButton).setSelected(true);
+        group.selectedToggleProperty().addListener((o, old, now) -> {
+            if (now != null && now.getUserData() != view) {
+                view = (DashboardView) now.getUserData();
+                ctx.settings().setDashboardView(view);
+                refresh();
+            }
+        });
+    }
+
+    private static void show(javafx.scene.Node node, boolean visible) {
+        node.setVisible(visible);
+        node.setManaged(visible);
     }
 
     private void buildTabs(List<Person> persons) {

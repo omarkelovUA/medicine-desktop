@@ -30,15 +30,18 @@
                 <HBox fx:id="personBar" styleClass="person-bar" spacing="8" alignment="CENTER_LEFT">
                     <Button fx:id="googleButton" onAction="#toggleGoogle"/>
                     <Button fx:id="editPersonButton" text="%btn.editPerson" onAction="#editPerson"/>
+                    <HBox fx:id="viewSwitch"/>
                     <Region HBox.hgrow="ALWAYS"/>
                     <CheckBox fx:id="showFinished" text="%toggle.showFinished" onAction="#refresh"/>
                 </HBox>
             </VBox>
         </top>
         <center>
-            <ScrollPane fitToWidth="true" styleClass="cards-scroll">
-                <FlowPane fx:id="cards" hgap="12" vgap="12" styleClass="cards"/>
-            </ScrollPane>
+            <StackPane fx:id="center">
+                <ScrollPane fx:id="cardsScroll" fitToWidth="true" styleClass="cards-scroll">
+                    <FlowPane fx:id="cards" hgap="12" vgap="12" styleClass="cards"/>
+                </ScrollPane>
+            </StackPane>
         </center>
         <bottom>
             <HBox styleClass="status-bar">

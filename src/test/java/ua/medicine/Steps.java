@@ -48,9 +48,27 @@ final class Steps {
     private Steps() {
     }
 
+    /** Also accepts {@code timeline:<ZOOM>[:<tab index>]}: opens that tab, the timeline and the zoom. */
     static Consumer<App> get(String name) {
+        if (name.startsWith("timeline:")) {
+            String[] parts = name.split(":");
+            return app -> {
+                var root = app.dashboard().root();
+                if (parts.length > 2) {
+                    ((ButtonBase) root.lookupAll(".person-tab").toArray(new Node[0])[Integer.parseInt(parts[2])]).fire();
+                }
+                fireToggle(root, ua.medicine.i18n.Messages.get("view.timeline"));
+                fireToggle(root, ua.medicine.i18n.Messages.get("zoom." + parts[1]));
+            };
+        }
         return STEPS.getOrDefault(name, app -> {
         });
+    }
+
+    static void fireToggle(Node root, String text) {
+        root.lookupAll(".toggle-button").stream()
+                .filter(n -> n instanceof ButtonBase b && text.equals(b.getText()))
+                .findFirst().ifPresent(n -> ((ButtonBase) n).fire());
     }
 
     static void later(int millis, Runnable r) {
