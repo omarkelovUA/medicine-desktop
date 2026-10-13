@@ -190,3 +190,8 @@
     -fx-text-fill: -danger;
     -fx-font-weight: bold;
 }
+
+.tab-warning {
+    -fx-text-fill: -danger;
+    -fx-font-weight: bold;
+}

@@ -28,10 +28,14 @@ public final class DoseService {
         this.syncTrigger = syncTrigger;
     }
 
+    /** Marks taken; allowed only on the dose's own day (like unticking). */
     public DoseOccurrence markTaken(long doseId) {
         DoseOccurrence dose = find(doseId);
         if (dose.takenAt() != null) {
             return dose;
+        }
+        if (!dose.scheduledAt().toLocalDate().equals(LocalDate.now(clock))) {
+            throw new IllegalStateException("A dose can be ticked only on its own day");
         }
         doses.markTaken(doseId, LocalDateTime.now(clock));
         syncTrigger.requestSync();

@@ -49,7 +49,7 @@ class CalendarSyncServiceTest {
         }
         return g;
     };
-    private final CalendarSyncService sync = new CalendarSyncService(personRepo, medicineRepo, doseRepo, factory);
+    private final CalendarSyncService sync = new CalendarSyncService(personRepo, medicineRepo, doseRepo, factory, clock);
 
     private final Person oleksandr = personRepo.save(new Person(null, "Олександр", "#3a7bd5", "o@gmail.com", "calO"));
     private final Person maria = personRepo.save(new Person(null, "Марія", "#c0397b", "m@gmail.com", "calM"));
@@ -198,5 +198,45 @@ class CalendarSyncServiceTest {
         assertThat(r.failed()).isPositive();
         assertThat(mariaGateway.events).hasSize(1);
         assertThat(doseRepo.findNeedingSync(oleksandr.id())).hasSize(2);
+    }
+
+    @Test
+    void deletedCalendarIsRecreatedAndAllDosesPushedAgain() {
+        sync.syncNow();
+        fake.calendarDeleted = true;
+        fake.events.clear();
+        doseService.markTaken(doses(amox).getFirst().id());
+        var r = sync.syncNow();
+        assertThat(r.failed()).isZero();
+        assertThat(fake.calendarsCreated).isEqualTo(1);
+        assertThat(fake.events).hasSize(2);
+        assertThat(personRepo.findById(oleksandr.id()).orElseThrow().googleCalendarId()).isEqualTo("cal-Ліки");
+        assertThat(doseRepo.findNeedingSync(oleksandr.id())).isEmpty();
+    }
+
+    @Test
+    void pastDosesNeverPushedAreNotSentOnFirstLink() {
+        doseRepo.insertAll(List.of(DoseOccurrence.planned(amox.id(), clock.instant()
+                .atZone(clock.getZone()).toLocalDate().minusDays(1).atTime(8, 0))));
+        assertThat(sync.syncNow().pushed()).isEqualTo(2); // only today's 08:00 and 20:00
+        assertThat(fake.inserts).isEqualTo(2);
+    }
+
+    @Test
+    void shutdownWaitsForRunningPush() throws Exception {
+        var quick = new CalendarSyncService(personRepo, medicineRepo, doseRepo, factory, clock, 0);
+        var entered = new CountDownLatch(1);
+        fake.onInsert = () -> {
+            entered.countDown();
+            try {
+                Thread.sleep(300);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+        };
+        quick.requestSync();
+        assertThat(entered.await(5, TimeUnit.SECONDS)).isTrue();
+        quick.shutdown();
+        assertThat(doseRepo.findNeedingSync(oleksandr.id())).isEmpty();
     }
 }

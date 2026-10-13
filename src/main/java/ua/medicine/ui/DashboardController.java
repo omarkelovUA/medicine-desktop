@@ -109,6 +109,12 @@ public final class DashboardController {
         for (Person p : persons) {
             var content = new HBox(6, new Avatar(p, 10), new Label(p.name()));
             content.setAlignment(Pos.CENTER_LEFT);
+            if (p.googleLinked() && authFailedPersonIds.contains(p.id())) {
+                var warning = new Label("⚠");
+                warning.getStyleClass().add("tab-warning");
+                warning.setTooltip(new Tooltip(Messages.get("tab.authProblem")));
+                content.getChildren().add(warning);
+            }
             int overdue = ctx.doseService().overdueCount(p.id());
             if (overdue > 0) {
                 var badge = new Label(String.valueOf(overdue));

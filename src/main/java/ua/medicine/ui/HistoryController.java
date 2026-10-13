@@ -70,11 +70,7 @@ public final class HistoryController {
         person.setItems(FXCollections.observableArrayList(persons));
         person.getSelectionModel().selectFirst();
 
-        List<Choice<Long>> medicines = new ArrayList<>();
-        medicines.add(new Choice<>(null, Messages.get("history.allMedicines")));
-        ctx.medicineRepository().findAll().forEach(m -> medicines.add(new Choice<>(m.id(), m.name())));
-        medicine.setItems(FXCollections.observableArrayList(medicines));
-        medicine.getSelectionModel().selectFirst();
+        fillMedicines();
 
         period.setItems(FXCollections.observableArrayList(
                 new Choice<>(7, Messages.get("history.days7")),
@@ -83,7 +79,10 @@ public final class HistoryController {
                 new Choice<>(null, Messages.get("history.all"))));
         period.getSelectionModel().select(1);
 
-        person.setOnAction(e -> reload());
+        person.setOnAction(e -> {
+            fillMedicines();
+            reload();
+        });
         medicine.setOnAction(e -> reload());
         period.setOnAction(e -> reload());
 
@@ -105,6 +104,16 @@ public final class HistoryController {
         root.getStyleClass().add("app-root");
         reload();
         return root;
+    }
+
+    /** Medicines of the selected person (all persons: names labelled with the person). */
+    private void fillMedicines() {
+        Long personId = person.getValue() == null ? null : person.getValue().value();
+        List<Choice<Long>> choices = new ArrayList<>();
+        choices.add(new Choice<>(null, Messages.get("history.allMedicines")));
+        ctx.historyService().medicineChoices(personId).forEach(c -> choices.add(new Choice<>(c.medicineId(), c.label())));
+        medicine.setItems(FXCollections.observableArrayList(choices));
+        medicine.getSelectionModel().selectFirst();
     }
 
     private void reload() {

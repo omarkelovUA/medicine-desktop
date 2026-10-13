@@ -92,10 +92,16 @@ public final class DoseRepository {
 
     /** DIRTY and DELETE_PENDING doses of the person's medicines (including DELETE_PENDING). */
     public List<DoseOccurrence> findNeedingSync(long personId) {
+        return findNeedingSync(personId, LocalDateTime.of(1, 1, 1, 0, 0));
+    }
+
+    /** As {@link #findNeedingSync(long)}, but doses never pushed are included only from {@code pushFrom} on. */
+    public List<DoseOccurrence> findNeedingSync(long personId, LocalDateTime pushFrom) {
         return query("""
                 SELECT d.* FROM dose d JOIN medicine m ON m.id = d.medicine_id
                 WHERE m.person_id=? AND d.sync_state IN ('DIRTY','DELETE_PENDING')
-                ORDER BY d.scheduled_at""", personId);
+                  AND (d.calendar_event_id IS NOT NULL OR d.scheduled_at>=?)
+                ORDER BY d.scheduled_at""", personId, text(pushFrom));
     }
 
     public void markDirtyForPerson(long personId) {

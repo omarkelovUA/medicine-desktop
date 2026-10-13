@@ -14,6 +14,8 @@ class FakeCalendarGateway implements CalendarGateway {
     boolean failAuth;
     boolean failIo;
     boolean failUnexpected;
+    boolean calendarDeleted;
+    int calendarsCreated;
     Runnable onInsert = () -> {
     };
     private int nextId;
@@ -21,12 +23,19 @@ class FakeCalendarGateway implements CalendarGateway {
     @Override
     public String ensureCalendar(String name) {
         check();
+        if (calendarDeleted) {
+            calendarDeleted = false;
+            calendarsCreated++;
+        }
         return "cal-" + name;
     }
 
     @Override
     public String insertEvent(String calendarId, CalendarEvent e) {
         check();
+        if (calendarDeleted) {
+            throw new CalendarNotFoundException(calendarId);
+        }
         onInsert.run();
         inserts++;
         String id = "ev" + (++nextId);
@@ -37,6 +46,9 @@ class FakeCalendarGateway implements CalendarGateway {
     @Override
     public void patchEvent(String calendarId, String eventId, CalendarEvent e) {
         check();
+        if (calendarDeleted) {
+            throw new CalendarNotFoundException(calendarId);
+        }
         if (!events.containsKey(eventId)) {
             throw new EventNotFoundException(eventId);
         }

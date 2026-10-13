@@ -67,6 +67,13 @@ class DoseServiceTest {
     }
 
     @Test
+    void markTakenRejectedOnAnotherDay() { // e.g. a reminder card left open past midnight
+        clock.set(dt("2026-10-14T00:30"));
+        assertThatThrownBy(() -> svc.markTaken(id20)).isInstanceOf(IllegalStateException.class);
+        assertThat(doseRepo.findById(id20).orElseThrow().takenAt()).isNull();
+    }
+
+    @Test
     void unmarkSameDayOk() {
         svc.markTaken(id08);
         assertThat(svc.unmarkTaken(id08).takenAt()).isNull();

@@ -33,12 +33,12 @@ public final class GoogleCalendarGateway implements CalendarGateway {
 
     /** The account's email (id of its primary calendar). */
     public String primaryEmail() {
-        return call(null, () -> client.calendarList().get("primary").execute().getId());
+        return call(null, null, () -> client.calendarList().get("primary").execute().getId());
     }
 
     @Override
     public String ensureCalendar(String name) {
-        return call(null, () -> {
+        return call(null, null, () -> {
             var items = client.calendarList().list().execute().getItems();
             if (items != null) {
                 for (var entry : items) {
@@ -56,18 +56,18 @@ public final class GoogleCalendarGateway implements CalendarGateway {
 
     @Override
     public String insertEvent(String calendarId, CalendarEvent event) {
-        return call(null, () -> client.events().insert(calendarId, toEvent(event)).execute().getId());
+        return call(null, calendarId, () -> client.events().insert(calendarId, toEvent(event)).execute().getId());
     }
 
     @Override
     public void patchEvent(String calendarId, String eventId, CalendarEvent event) {
         // full update so that removing the "taken" colour also works
-        call(eventId, () -> client.events().update(calendarId, eventId, toEvent(event)).execute());
+        call(eventId, calendarId, () -> client.events().update(calendarId, eventId, toEvent(event)).execute());
     }
 
     @Override
     public void deleteEvent(String calendarId, String eventId) {
-        call(eventId, () -> client.events().delete(calendarId, eventId).execute());
+        call(eventId, calendarId, () -> client.events().delete(calendarId, eventId).execute());
     }
 
     private Event toEvent(CalendarEvent e) {
@@ -88,13 +88,17 @@ public final class GoogleCalendarGateway implements CalendarGateway {
                 .setTimeZone(zone.getId());
     }
 
-    private static <T> T call(String eventId, ApiCall<T> apiCall) {
+    /** Maps API errors; a 404 means the event is gone, or — for calls on no event — the calendar is gone. */
+    private static <T> T call(String eventId, String calendarId, ApiCall<T> apiCall) {
         try {
             return apiCall.call();
         } catch (GoogleJsonResponseException e) {
             int code = e.getStatusCode();
             if ((code == 404 || code == 410) && eventId != null) {
                 throw new EventNotFoundException(eventId);
+            }
+            if (code == 404 && calendarId != null) {
+                throw new CalendarNotFoundException(calendarId);
             }
             if (code == 401) {
                 throw new AuthRequiredException(e.getMessage(), e);

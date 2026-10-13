@@ -21,8 +21,7 @@ final class SyncStatus {
             return Messages.get("sync.authNeeded");
         }
         if (result.failed() > 0) {
-            int n = result.failed();
-            return Messages.get("sync.failed", n + " " + UkrainianPlural.choose(n, "запис", "записи", "записів"));
+            return Messages.get("sync.failed", UkrainianPlural.count(result.failed(), "plural.records"));
         }
         return Messages.get("sync.ok", Formats.time(now));
     }

@@ -36,6 +36,24 @@ public final class HistoryService {
         this.clock = clock;
     }
 
+    public record MedicineChoice(long medicineId, String label) {
+    }
+
+    /**
+     * Medicines for the history filter: only the person's own when one is selected, otherwise all,
+     * labelled with the person's name so equal names stay distinguishable. Ordered by label.
+     */
+    public List<MedicineChoice> medicineChoices(Long personId) {
+        Map<Long, String> personNames = persons.findAll().stream()
+                .collect(Collectors.toMap(Person::id, Person::name));
+        return medicines.findAll().stream()
+                .filter(m -> personId == null || m.personId() == personId)
+                .map(m -> new MedicineChoice(m.id(),
+                        personId == null ? m.name() + " (" + personNames.get(m.personId()) + ")" : m.name()))
+                .sorted(Comparator.comparing(MedicineChoice::label))
+                .toList();
+    }
+
     /** Doses scheduled up to now, newest first. */
     public List<HistoryRow> rows(HistoryFilter filter) {
         LocalDateTime now = LocalDateTime.now(clock);

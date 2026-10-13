@@ -38,33 +38,23 @@ public final class Formats {
     }
 
     public static String amount(int n, PeriodUnit unit) {
-        String word = switch (unit) {
-            case DAYS -> UkrainianPlural.choose(n, "день", "дні", "днів");
-            case WEEKS -> UkrainianPlural.choose(n, "тиждень", "тижні", "тижнів");
-            case MONTHS -> UkrainianPlural.choose(n, "місяць", "місяці", "місяців");
-            case YEARS -> UkrainianPlural.choose(n, "рік", "роки", "років");
-        };
-        return n + " " + word;
+        return UkrainianPlural.count(n, "plural." + unit.name());
     }
 
     public static String progress(CourseProgress p) {
-        String unit = switch (p.unit()) {
-            case DAYS -> "День";
-            case WEEKS -> "Тиждень";
-            case MONTHS -> "Місяць";
-            case YEARS -> "Рік";
-        };
-        return unit + " " + p.current() + " з " + p.total();
+        return Messages.get("progress." + p.unit().name(), String.valueOf(p.current()), String.valueOf(p.total()));
     }
 
     public static String scheduleSummary(Schedule schedule) {
         return switch (schedule) {
-            case Schedule.Daily daily -> daily.times().size() == 1 ? "щодня" : daily.times().size() + "×/день";
+            case Schedule.Daily daily -> daily.times().size() == 1
+                    ? Messages.get("format.daily.once")
+                    : Messages.get("format.daily.times", String.valueOf(daily.times().size()));
             case Schedule.Weekly weekly -> weekly.days().stream()
                     .sorted()
                     .map(d -> d.getDisplayName(TextStyle.SHORT, Messages.LOCALE).toLowerCase(Messages.LOCALE))
                     .collect(Collectors.joining(", "));
-            case Schedule.Monthly monthly -> "щомісяця " + monthly.dayOfMonth() + "-го";
+            case Schedule.Monthly monthly -> Messages.get("format.monthly", String.valueOf(monthly.dayOfMonth()));
         };
     }
 }

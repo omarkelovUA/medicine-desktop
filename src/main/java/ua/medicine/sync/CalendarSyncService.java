@@ -12,8 +12,11 @@ import ua.medicine.persistence.PersonRepository;
 import ua.medicine.service.SyncTrigger;
 
 import java.io.UncheckedIOException;
+import java.time.Clock;
+import java.time.LocalDate;
 import java.util.HashMap;
 import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.Executors;
@@ -27,11 +30,14 @@ public final class CalendarSyncService implements SyncTrigger {
 
     private static final Logger log = LoggerFactory.getLogger(CalendarSyncService.class);
     private static final long DEBOUNCE_MS = 2000;
+    private static final long SHUTDOWN_WAIT_SECONDS = 10;
 
     private final PersonRepository persons;
     private final MedicineRepository medicines;
     private final DoseRepository doses;
     private final CalendarGatewayFactory gateways;
+    private final Clock clock;
+    private final long debounceMs;
     private final ScheduledExecutorService executor = Executors.newSingleThreadScheduledExecutor(r -> {
         Thread t = new Thread(r, "calendar-sync");
         t.setDaemon(true);
@@ -43,11 +49,18 @@ public final class CalendarSyncService implements SyncTrigger {
     };
 
     public CalendarSyncService(PersonRepository persons, MedicineRepository medicines, DoseRepository doses,
-                               CalendarGatewayFactory gateways) {
+                               CalendarGatewayFactory gateways, Clock clock) {
+        this(persons, medicines, doses, gateways, clock, DEBOUNCE_MS);
+    }
+
+    CalendarSyncService(PersonRepository persons, MedicineRepository medicines, DoseRepository doses,
+                        CalendarGatewayFactory gateways, Clock clock, long debounceMs) {
         this.persons = persons;
         this.medicines = medicines;
         this.doses = doses;
         this.gateways = gateways;
+        this.clock = clock;
+        this.debounceMs = debounceMs;
     }
 
     public void setListener(Consumer<SyncResult> listener) {
@@ -58,10 +71,13 @@ public final class CalendarSyncService implements SyncTrigger {
     @Override
     public void requestSync() {
         synchronized (pendingLock) {
+            if (executor.isShutdown()) {
+                return;
+            }
             if (pending != null) {
                 pending.cancel(false);
             }
-            pending = executor.schedule(this::runAndNotify, DEBOUNCE_MS, TimeUnit.MILLISECONDS);
+            pending = executor.schedule(this::runAndNotify, debounceMs, TimeUnit.MILLISECONDS);
         }
     }
 
@@ -75,56 +91,61 @@ public final class CalendarSyncService implements SyncTrigger {
     }
 
     public synchronized SyncResult syncNow() {
-        int pushed = 0;
-        int deleted = 0;
-        int failed = 0;
-        String lastError = null;
-        Set<Long> authFailed = new LinkedHashSet<>();
-        Map<Long, Medicine> medicineCache = new HashMap<>();
-
+        var run = new Run();
         for (Person person : persons.findAll()) {
-            var needing = doses.findNeedingSync(person.id());
-            if (needing.isEmpty()) {
-                continue;
-            }
             if (!person.googleLinked()) {
-                needing.stream().filter(d -> d.syncState() == SyncState.DELETE_PENDING)
+                doses.findNeedingSync(person.id()).stream()
+                        .filter(d -> d.syncState() == SyncState.DELETE_PENDING)
                         .forEach(d -> doses.delete(d.id()));
                 continue;
             }
             try {
                 CalendarGateway gateway = gateways.forPerson(person);
-                String calendarId = person.googleCalendarId();
-                for (DoseOccurrence dose : needing) {
-                    try {
-                        if (dose.syncState() == SyncState.DELETE_PENDING) {
-                            deleteRemote(gateway, calendarId, dose);
-                            doses.delete(dose.id());
-                            deleted++;
-                        } else {
-                            Medicine m = medicineCache.computeIfAbsent(dose.medicineId(),
-                                    id -> medicines.findById(id).orElseThrow());
-                            String eventId = push(gateway, calendarId, m, dose);
-                            markClean(dose, eventId);
-                            pushed++;
-                        }
-                    } catch (UncheckedIOException e) {
-                        failed++;
-                        lastError = e.getMessage();
-                        log.warn("Sync of dose {} failed: {}", dose.id(), e.getMessage());
-                    }
+                try {
+                    syncPerson(run, gateway, person.googleCalendarId(), person.id());
+                } catch (CalendarNotFoundException e) {
+                    log.warn("Calendar of person {} was deleted; creating it again", person.id());
+                    String calendarId = gateway.ensureCalendar(GoogleLinkService.CALENDAR_NAME);
+                    persons.save(person.withGoogle(person.googleEmail(), calendarId));
+                    doses.markDirtyForPerson(person.id()); // every event went with the old calendar
+                    syncPerson(run, gateway, calendarId, person.id());
                 }
             } catch (AuthRequiredException e) {
-                authFailed.add(person.id());
-                lastError = e.getMessage();
+                run.authFailed.add(person.id());
+                run.lastError = e.getMessage();
                 log.warn("Google authorization needed for person {}: {}", person.id(), e.getMessage());
             } catch (RuntimeException e) {
-                failed++;
-                lastError = e.getMessage();
+                run.failed++;
+                run.lastError = e.getMessage();
                 log.error("Sync for person {} failed", person.id(), e);
             }
         }
-        return new SyncResult(pushed, deleted, failed, authFailed, lastError);
+        return new SyncResult(run.pushed, run.deleted, run.failed, run.authFailed, run.lastError);
+    }
+
+    /** @throws CalendarNotFoundException if the person's calendar is gone */
+    private void syncPerson(Run run, CalendarGateway gateway, String calendarId, long personId) {
+        // doses never pushed before are sent from today on; past ones stay out of the calendar
+        List<DoseOccurrence> needing = doses.findNeedingSync(personId, LocalDate.now(clock).atStartOfDay());
+        for (DoseOccurrence dose : needing) {
+            try {
+                if (dose.syncState() == SyncState.DELETE_PENDING) {
+                    deleteRemote(gateway, calendarId, dose);
+                    doses.delete(dose.id());
+                    run.deleted++;
+                } else {
+                    Medicine m = run.medicines.computeIfAbsent(dose.medicineId(),
+                            id -> medicines.findById(id).orElseThrow());
+                    String eventId = push(gateway, calendarId, m, dose);
+                    doses.recordPushed(dose.id(), eventId, dose.takenAt(), dose.syncState());
+                    run.pushed++;
+                }
+            } catch (UncheckedIOException e) {
+                run.failed++;
+                run.lastError = e.getMessage();
+                log.warn("Sync of dose {} failed: {}", dose.id(), e.getMessage());
+            }
+        }
     }
 
     private static void deleteRemote(CalendarGateway gateway, String calendarId, DoseOccurrence dose) {
@@ -151,12 +172,30 @@ public final class CalendarSyncService implements SyncTrigger {
         return gateway.insertEvent(calendarId, event);
     }
 
-    /** Stores the event id; stays DIRTY if the dose changed while it was being pushed. */
-    private void markClean(DoseOccurrence pushedDose, String eventId) {
-        doses.recordPushed(pushedDose.id(), eventId, pushedDose.takenAt(), pushedDose.syncState());
+    /** Stops accepting work and waits for a push in progress, so its event id is not lost. */
+    public void shutdown() {
+        synchronized (pendingLock) {
+            if (pending != null) {
+                pending.cancel(false);
+            }
+            executor.shutdown();
+        }
+        try {
+            if (!executor.awaitTermination(SHUTDOWN_WAIT_SECONDS, TimeUnit.SECONDS)) {
+                executor.shutdownNow();
+            }
+        } catch (InterruptedException e) {
+            executor.shutdownNow();
+            Thread.currentThread().interrupt();
+        }
     }
 
-    public void shutdown() {
-        executor.shutdownNow();
+    private static final class Run {
+        int pushed;
+        int deleted;
+        int failed;
+        String lastError;
+        final Set<Long> authFailed = new LinkedHashSet<>();
+        final Map<Long, Medicine> medicines = new HashMap<>();
     }
 }

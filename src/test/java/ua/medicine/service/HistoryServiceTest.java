@@ -97,4 +97,16 @@ class HistoryServiceTest {
     void emptyAdherenceHasNoPercent() {
         assertThat(new Adherence(0, 0).percent()).isEmpty();
     }
+
+    @Test
+    void medicineChoicesFollowPersonAndAreDisambiguated() {
+        var other = personRepo.save(new Person(null, "Софія", "#e08a1e", null, null));
+        var hers = medicines.create(med(other.id(), d("2026-10-01"), new Course.Ongoing(),
+                new Schedule.Daily(List.of(t("09:00"))))); // also named "Амоксицилін"
+        assertThat(history.medicineChoices(other.id())).containsExactly(
+                new HistoryService.MedicineChoice(hers.id(), "Амоксицилін"));
+        assertThat(history.medicineChoices(null)).containsExactly(
+                new HistoryService.MedicineChoice(amox.id(), "Амоксицилін (Марія)"),
+                new HistoryService.MedicineChoice(hers.id(), "Амоксицилін (Софія)"));
+    }
 }

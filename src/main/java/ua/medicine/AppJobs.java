@@ -3,6 +3,7 @@ package ua.medicine;
 import javafx.application.Platform;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import ua.medicine.service.DayChangeDetector;
 import ua.medicine.service.Reminder;
 import ua.medicine.ui.DashboardController;
 import ua.medicine.ui.NotificationPane;
@@ -11,12 +12,15 @@ import java.awt.GraphicsEnvironment;
 import java.awt.Toolkit;
 import java.time.Duration;
 import java.time.LocalDate;
-import java.time.LocalDateTime;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
-/** Periodic work: reminders + dashboard refresh (30 s), sync (15 min), new day (midnight). */
+/**
+ * Periodic work every 30 s: new-day handling, reminders, dashboard refresh; sync every 15 min.
+ * The day change is detected from the date on each tick rather than by a midnight timer, because
+ * scheduled delays do not advance while the computer sleeps.
+ */
 public final class AppJobs {
 
     private static final Logger log = LoggerFactory.getLogger(AppJobs.class);
@@ -25,6 +29,7 @@ public final class AppJobs {
     private final AppContext ctx;
     private final DashboardController dashboard;
     private final NotificationPane notifications;
+    private final DayChangeDetector dayChange;
     private final ScheduledExecutorService timer = Executors.newSingleThreadScheduledExecutor(r -> {
         Thread t = new Thread(r, "app-jobs");
         t.setDaemon(true);
@@ -35,12 +40,12 @@ public final class AppJobs {
         this.ctx = ctx;
         this.dashboard = dashboard;
         this.notifications = notifications;
+        this.dayChange = new DayChangeDetector(LocalDate.now(ctx.clock()));
     }
 
     public void start() {
         timer.scheduleAtFixedRate(() -> Platform.runLater(this::tick), 0, 30, TimeUnit.SECONDS);
         timer.scheduleAtFixedRate(() -> ctx.sync().requestSync(), 15, 15, TimeUnit.MINUTES);
-        scheduleMidnight();
     }
 
     public void stop() {
@@ -49,6 +54,9 @@ public final class AppJobs {
 
     private void tick() {
         try {
+            if (dayChange.changed(LocalDate.now(ctx.clock()))) {
+                newDay();
+            }
             var due = ctx.reminderService().due();
             due.forEach(r -> notifications.show(r, this::taken, this::snooze));
             if (!due.isEmpty()) {
@@ -84,18 +92,9 @@ public final class AppJobs {
         }
     }
 
-    /** Re-computed every day so DST changes don't shift it. */
-    private void scheduleMidnight() {
-        LocalDateTime now = LocalDateTime.now(ctx.clock());
-        LocalDateTime next = LocalDate.now(ctx.clock()).plusDays(1).atStartOfDay().plusSeconds(5);
-        timer.schedule(() -> {
-            Platform.runLater(this::newDay);
-            scheduleMidnight();
-        }, Duration.between(now, next).toMillis(), TimeUnit.MILLISECONDS);
-    }
-
     private void newDay() {
         try {
+            notifications.getChildren().clear(); // yesterday's reminders can no longer be ticked
             ctx.medicineService().extendWindows();
             ctx.doseService().resolveMissed();
             ctx.sync().requestSync();

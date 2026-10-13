@@ -9,6 +9,7 @@ public interface CalendarGateway {
     /** Finds or creates the calendar with this name and returns its id. */
     String ensureCalendar(String name);
 
+    /** @throws CalendarNotFoundException if the calendar no longer exists */
     String insertEvent(String calendarId, CalendarEvent event);
 
     /** @throws EventNotFoundException if the event no longer exists */
