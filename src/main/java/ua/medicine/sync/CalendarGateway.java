@@ -1,5 +1,8 @@
 package ua.medicine.sync;
 
+import java.time.LocalDateTime;
+import java.util.List;
+
 /**
  * One Google account's calendar. Any call may throw {@link AuthRequiredException};
  * network problems surface as {@link java.io.UncheckedIOException}.
@@ -17,4 +20,11 @@ public interface CalendarGateway {
 
     /** @throws EventNotFoundException if the event no longer exists */
     void deleteEvent(String calendarId, String eventId);
+
+    /**
+     * Events of the calendar starting in [from, toExclusive); deleted events are not returned.
+     *
+     * @throws CalendarNotFoundException if the calendar no longer exists
+     */
+    List<RemoteEvent> listEvents(String calendarId, LocalDateTime from, LocalDateTime toExclusive);
 }

@@ -273,7 +273,7 @@ public final class DashboardController {
         authFailedPersonIds.addAll(result.authFailedPersonIds());
         boolean anyoneLinked = ctx.personService().all().stream().anyMatch(Person::googleLinked);
         statusLabel.setText(SyncStatus.text(result, LocalTime.now(ctx.clock()), anyoneLinked));
-        if (!before.equals(authFailedPersonIds)) {
+        if (!before.equals(authFailedPersonIds) || result.pulled() > 0) {
             refresh();
         }
     }

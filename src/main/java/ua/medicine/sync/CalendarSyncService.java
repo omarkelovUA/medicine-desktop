@@ -14,6 +14,7 @@ import ua.medicine.service.SyncTrigger;
 import java.io.UncheckedIOException;
 import java.time.Clock;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -24,13 +25,16 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
-/** One-way push of doses to each linked person's Google calendar. */
+/** Pushes doses to each linked person's Google calendar and reads back the marks made there on the phone. */
 public final class CalendarSyncService implements SyncTrigger {
 
     private static final Logger log = LoggerFactory.getLogger(CalendarSyncService.class);
     private static final long DEBOUNCE_MS = 2000;
     private static final long SHUTDOWN_WAIT_SECONDS = 10;
+    private static final int PULL_DAYS = 7;
 
     private final PersonRepository persons;
     private final MedicineRepository medicines;
@@ -86,7 +90,7 @@ public final class CalendarSyncService implements SyncTrigger {
             listener.accept(syncNow());
         } catch (RuntimeException e) {
             log.error("Sync failed", e);
-            listener.accept(new SyncResult(0, 0, 1, Set.of(), e.getMessage()));
+            listener.accept(new SyncResult(0, 0, 0, 1, Set.of(), e.getMessage()));
         }
     }
 
@@ -120,11 +124,18 @@ public final class CalendarSyncService implements SyncTrigger {
                 log.error("Sync for person {} failed", person.id(), e);
             }
         }
-        return new SyncResult(run.pushed, run.deleted, run.failed, run.authFailed, run.lastError);
+        return new SyncResult(run.pushed, run.pulled, run.deleted, run.failed, run.authFailed, run.lastError);
     }
 
     /** @throws CalendarNotFoundException if the person's calendar is gone */
     private void syncPerson(Run run, CalendarGateway gateway, String calendarId, long personId) {
+        pushChanges(run, gateway, calendarId, personId);
+        if (pull(run, gateway, calendarId, personId)) {
+            pushChanges(run, gateway, calendarId, personId); // the changed events take the app's form
+        }
+    }
+
+    private void pushChanges(Run run, CalendarGateway gateway, String calendarId, long personId) {
         // doses never pushed before are sent from today on; past ones stay out of the calendar
         List<DoseOccurrence> needing = doses.findNeedingSync(personId, LocalDate.now(clock).atStartOfDay());
         for (DoseOccurrence dose : needing) {
@@ -146,6 +157,55 @@ public final class CalendarSyncService implements SyncTrigger {
                 log.warn("Sync of dose {} failed: {}", dose.id(), e.getMessage());
             }
         }
+    }
+
+    /**
+     * Applies event colours changed on the phone to the person's recent doses.
+     *
+     * @return whether any dose became DIRTY and so needs pushing
+     * @throws CalendarNotFoundException if the person's calendar is gone
+     */
+    private boolean pull(Run run, CalendarGateway gateway, String calendarId, long personId) {
+        LocalDate today = LocalDate.now(clock);
+        LocalDateTime from = today.minusDays(PULL_DAYS).atStartOfDay();
+        LocalDateTime to = today.plusDays(1).atStartOfDay();
+        List<RemoteEvent> events;
+        try {
+            events = gateway.listEvents(calendarId, from, to);
+        } catch (UncheckedIOException e) {
+            run.failed++;
+            run.lastError = e.getMessage();
+            log.warn("Reading events of person {} failed: {}", personId, e.getMessage());
+            return false;
+        }
+        Map<String, DoseOccurrence> byEvent = doses.findWithEventForPerson(personId, from, to).stream()
+                .collect(Collectors.toMap(DoseOccurrence::calendarEventId, Function.identity(), (a, b) -> a));
+        boolean changed = false;
+        for (RemoteEvent event : events) {
+            DoseOccurrence dose = byEvent.get(event.id());
+            if (dose == null) {
+                continue;
+            }
+            switch (RemoteMarks.decide(dose, event, clock.getZone())) {
+                case RemoteMarks.Take take -> {
+                    if (doses.markTakenFromPhone(dose.id(), take.at())) {
+                        run.pulled++;
+                        changed = true;
+                    }
+                }
+                case RemoteMarks.Untake ignored -> {
+                    boolean dayOver = dose.scheduledAt().toLocalDate().isBefore(today);
+                    if (doses.unmarkTakenFromPhone(dose.id(), dayOver)) {
+                        run.pulled++;
+                        changed = true;
+                    }
+                }
+                case RemoteMarks.Restore ignored -> changed |= doses.markDirtyIfClean(dose.id());
+                case RemoteMarks.None ignored -> {
+                }
+            }
+        }
+        return changed;
     }
 
     private static void deleteRemote(CalendarGateway gateway, String calendarId, DoseOccurrence dose) {
@@ -192,6 +252,7 @@ public final class CalendarSyncService implements SyncTrigger {
 
     private static final class Run {
         int pushed;
+        int pulled;
         int deleted;
         int failed;
         String lastError;

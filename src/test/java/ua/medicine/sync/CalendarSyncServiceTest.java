@@ -17,6 +17,8 @@ import ua.medicine.testutil.MutableClock;
 import ua.medicine.testutil.TestDb;
 
 import java.time.Duration;
+import java.time.Instant;
+import java.time.ZoneId;
 import java.util.HashMap;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
@@ -29,6 +31,7 @@ import static ua.medicine.domain.PeriodUnit.DAYS;
 import static ua.medicine.domain.SyncState.CLEAN;
 import static ua.medicine.domain.SyncState.DIRTY;
 import static ua.medicine.testutil.T.d;
+import static ua.medicine.testutil.T.dt;
 import static ua.medicine.testutil.T.med;
 import static ua.medicine.testutil.T.t;
 
@@ -238,5 +241,110 @@ class CalendarSyncServiceTest {
         assertThat(entered.await(5, TimeUnit.SECONDS)).isTrue();
         quick.shutdown();
         assertThat(doseRepo.findNeedingSync(oleksandr.id())).isEmpty();
+    }
+
+    private static Instant at(String isoLocal) {
+        return dt(isoLocal).atZone(ZoneId.systemDefault()).toInstant();
+    }
+
+    @Test
+    void phoneTickTakesDoseAndPushesItBack() {
+        sync.syncNow();
+        var morning = doses(amox).getFirst();
+        fake.phoneEdit(morning.calendarEventId(), "10", at("2026-10-13T09:10"));
+
+        var r = sync.syncNow();
+
+        assertThat(r.pulled()).isEqualTo(1);
+        var after = doseRepo.findById(morning.id()).orElseThrow();
+        assertThat(after.takenAt()).isEqualTo(dt("2026-10-13T09:10"));
+        assertThat(after.syncState()).isEqualTo(CLEAN);
+        assertThat(fake.events.get(morning.calendarEventId()).summary()).startsWith("✅");
+    }
+
+    @Test
+    void sageTickBecomesBasil() {
+        sync.syncNow();
+        var morning = doses(amox).getFirst();
+        fake.phoneEdit(morning.calendarEventId(), "2", at("2026-10-13T09:10"));
+
+        sync.syncNow();
+
+        assertThat(doseRepo.findById(morning.id()).orElseThrow().takenAt()).isNotNull();
+        assertThat(fake.colors.get(morning.calendarEventId())).isEqualTo("10");
+    }
+
+    @Test
+    void phoneUntickUntakesDose() {
+        var morning = doses(amox).getFirst();
+        doseService.markTaken(morning.id());
+        sync.syncNow();
+        String eventId = doseRepo.findById(morning.id()).orElseThrow().calendarEventId();
+        fake.phoneEdit(eventId, null, at("2026-10-13T12:30"));
+
+        var r = sync.syncNow();
+
+        assertThat(r.pulled()).isEqualTo(1);
+        var after = doseRepo.findById(morning.id()).orElseThrow();
+        assertThat(after.takenAt()).isNull();
+        assertThat(after.missed()).isFalse();
+        assertThat(fake.events.get(eventId).summary()).startsWith("💊");
+    }
+
+    @Test
+    void phoneTickSeenNextDayClearsMissed() {
+        sync.syncNow();
+        var morning = doses(amox).getFirst();
+        fake.phoneEdit(morning.calendarEventId(), "10", at("2026-10-13T09:10"));
+        clock.set(dt("2026-10-14T08:00"));
+        doseService.resolveMissed();
+        assertThat(doseRepo.findById(morning.id()).orElseThrow().missed()).isTrue();
+
+        sync.syncNow();
+
+        var after = doseRepo.findById(morning.id()).orElseThrow();
+        assertThat(after.takenAt()).isEqualTo(dt("2026-10-13T09:10"));
+        assertThat(after.missed()).isFalse();
+    }
+
+    @Test
+    void phoneTickOnLaterDayIsRestored() {
+        sync.syncNow();
+        var morning = doses(amox).getFirst();
+        fake.phoneEdit(morning.calendarEventId(), "10", at("2026-10-14T07:00"));
+        clock.set(dt("2026-10-14T08:00"));
+
+        var r = sync.syncNow();
+
+        assertThat(r.pulled()).isZero();
+        assertThat(doseRepo.findById(morning.id()).orElseThrow().takenAt()).isNull();
+        assertThat(fake.colors.get(morning.calendarEventId())).isNull();
+    }
+
+    @Test
+    void appTickBeforePullWins() {
+        sync.syncNow();
+        var evening = doses(amox).getLast();
+        doseService.markTaken(evening.id());
+        fake.phoneEdit(evening.calendarEventId(), "5", at("2026-10-13T12:01"));
+
+        sync.syncNow();
+
+        assertThat(doseRepo.findById(evening.id()).orElseThrow().takenAt()).isNotNull();
+        assertThat(fake.colors.get(evening.calendarEventId())).isEqualTo("10");
+    }
+
+    @Test
+    void listFailureCountsAsFailedAndChangesNothing() {
+        sync.syncNow();
+        var morning = doses(amox).getFirst();
+        fake.phoneEdit(morning.calendarEventId(), "10", at("2026-10-13T09:10"));
+        fake.failList = true;
+
+        var r = sync.syncNow();
+
+        assertThat(r.failed()).isEqualTo(1);
+        assertThat(r.lastError()).isNotBlank();
+        assertThat(doseRepo.findById(morning.id()).orElseThrow().takenAt()).isNull();
     }
 }

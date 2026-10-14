@@ -10,8 +10,10 @@ import com.google.api.services.calendar.model.EventReminder;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
+import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.util.ArrayList;
 import java.util.List;
 
 /** Google Calendar API v3 implementation of {@link CalendarGateway}. */
@@ -70,6 +72,31 @@ public final class GoogleCalendarGateway implements CalendarGateway {
         call(eventId, calendarId, () -> client.events().delete(calendarId, eventId).execute());
     }
 
+    @Override
+    public List<RemoteEvent> listEvents(String calendarId, LocalDateTime from, LocalDateTime toExclusive) {
+        return call(null, calendarId, () -> {
+            List<RemoteEvent> result = new ArrayList<>();
+            String pageToken = null;
+            do {
+                var page = client.events().list(calendarId)
+                        .setTimeMin(dateTime(from))
+                        .setTimeMax(dateTime(toExclusive))
+                        .setShowDeleted(false)
+                        .setSingleEvents(true)
+                        .setPageToken(pageToken)
+                        .execute();
+                if (page.getItems() != null) {
+                    for (Event e : page.getItems()) {
+                        result.add(new RemoteEvent(e.getId(), e.getColorId(),
+                                Instant.ofEpochMilli(e.getUpdated().getValue())));
+                    }
+                }
+                pageToken = page.getNextPageToken();
+            } while (pageToken != null);
+            return result;
+        });
+    }
+
     private Event toEvent(CalendarEvent e) {
         return new Event()
                 .setSummary(e.summary())
@@ -84,8 +111,12 @@ public final class GoogleCalendarGateway implements CalendarGateway {
 
     private EventDateTime at(LocalDateTime time) {
         return new EventDateTime()
-                .setDateTime(new DateTime(time.atZone(zone).toInstant().toEpochMilli()))
+                .setDateTime(dateTime(time))
                 .setTimeZone(zone.getId());
+    }
+
+    private DateTime dateTime(LocalDateTime time) {
+        return new DateTime(time.atZone(zone).toInstant().toEpochMilli());
     }
 
     /** Maps API errors; a 404 means the event is gone, or — for calls on no event — the calendar is gone. */
