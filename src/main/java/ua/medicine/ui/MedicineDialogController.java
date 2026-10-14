@@ -207,8 +207,12 @@ public final class MedicineDialogController {
             }
             Medicine fromForm = form.toMedicine(null, true);
             Optional<Medicine> sameName = ctx.medicineService().findSameName(fromForm.personId(), fromForm.name());
-            if (sameName.isPresent() && Dialogs.confirm(name.getScene().getWindow(),
-                    Messages.get("confirm.addPeriodToExisting", sameName.get().name()))) {
+            Optional<Boolean> addToExisting = sameName.isEmpty() ? Optional.of(false) : Dialogs.yesNoCancel(
+                    name.getScene().getWindow(), Messages.get("confirm.addPeriodToExisting", sameName.get().name()));
+            if (addToExisting.isEmpty()) {
+                return false; // cancelled: stay in the dialog, nothing saved
+            }
+            if (addToExisting.get()) {
                 try {
                     savedMedicine = ctx.medicineService().appendPeriods(sameName.get().id(), fromForm);
                 } catch (IllegalArgumentException overlap) {

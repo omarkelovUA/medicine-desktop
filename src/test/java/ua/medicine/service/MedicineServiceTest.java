@@ -202,7 +202,7 @@ class MedicineServiceTest {
                 new Schedule.Daily(List.of(t("09:00"))), true);
         var merged = svc.appendPeriods(existing.id(), form);
         assertThat(merged.active()).isTrue();
-        assertThat(merged.periods()).containsExactly(existing.lastPeriod(), oct20());
+        assertThat(merged.periods()).containsExactly(p("2026-10-13", new Course.Fixed(1, DAYS)), oct20());
         assertThat(merged.dosage()).isEqualTo("2 краплі");
         assertThat(merged.name()).isEqualTo("Вітамін A");
         assertThat(medicineRepo.findById(existing.id())).contains(merged);
@@ -219,5 +219,36 @@ class MedicineServiceTest {
     private Medicine named(String name) {
         var m = twoDays();
         return new Medicine(null, pid, name, m.dosage(), m.color(), m.periods(), m.schedule(), true);
+    }
+
+    @Test
+    void deleteEndsOngoingPeriodToday() {
+        var m = svc.create(med(pid, d("2026-01-01"), new Course.Ongoing(), new Schedule.Daily(List.of(t("08:00")))));
+        svc.delete(m.id());
+        assertThat(medicineRepo.findById(m.id()).orElseThrow().periods())
+                .containsExactly(p("2026-01-01", new Course.Fixed(286, DAYS))); // 1 Jan .. 13 Oct
+    }
+
+    @Test
+    void deleteDropsPeriodsNotStartedYet() {
+        var m = svc.create(twoDays().withPeriods(List.of(twoDays().lastPeriod(), oct20())));
+        svc.delete(m.id());
+        assertThat(medicineRepo.findById(m.id()).orElseThrow().periods())
+                .containsExactly(p("2026-10-13", new Course.Fixed(1, DAYS))); // running period ends today
+    }
+
+    @Test
+    void deleteKeepsAMedicineThatNeverStarted() {
+        var m = svc.create(named("x").withPeriods(List.of(oct20())));
+        svc.delete(m.id());
+        assertThat(medicineRepo.findById(m.id()).orElseThrow().periods()).containsExactly(oct20());
+    }
+
+    @Test
+    void restartAfterDeletingOngoingAppends() {
+        var m = svc.create(named("Магній").withPeriods(List.of(p("2026-01-01", new Course.Ongoing()))));
+        svc.delete(m.id());
+        var merged = svc.appendPeriods(m.id(), named("Магній").withPeriods(List.of(oct20())));
+        assertThat(merged.periods()).hasSize(2);
     }
 }

@@ -94,7 +94,7 @@ class MergeDuplicatesMigrationTest {
         persons();
         sql(medicine(1, 1, "Вітамін A", "1 капсула", false), period(1, "2026-01-01", 30),
                 medicine(2, 1, " вітамін a ", "2 краплі", true), period(2, "2026-08-01", 30),
-                dose(1, "2026-01-05T08:00", "ev1"), dose(2, "2026-08-05T08:00", "ev2"));
+                dose(1, "2026-01-30T08:00", "ev1"), dose(2, "2026-08-05T08:00", "ev2"));
         List<Medicine> all = migratedMedicines();
         assertThat(all).singleElement().satisfies(m -> {
             assertThat(m.id()).isEqualTo(2L);
@@ -148,5 +148,38 @@ class MergeDuplicatesMigrationTest {
             assertThat(m.active()).isFalse();
             assertThat(m.periods()).hasSize(2);
         });
+    }
+
+    @Test
+    void deletedOngoingIsClippedToItsLastDoseAndMerged() {
+        migrateTo("2");
+        persons();
+        sql(medicine(1, 1, "Магній", "", false),
+                "INSERT INTO period(medicine_id, start_date) VALUES (1, '2026-01-01')", // ongoing, deleted in March
+                dose(1, "2026-03-10T08:00", null),
+                medicine(2, 1, "Магній", "", true), period(2, "2026-08-01", 30));
+        assertThat(migratedMedicines()).singleElement().satisfies(m -> assertThat(m.periods()).containsExactly(
+                p("2026-01-01", new Course.Fixed(69, DAYS)), p("2026-08-01", new Course.Fixed(30, DAYS))));
+    }
+
+    @Test
+    void runningMedicineWithOtherScheduleNotMerged() {
+        migrateTo("2");
+        persons();
+        sql(medicine(1, 1, "Вітамін A", "", true), period(1, "2099-01-01", 30), // future doses at 08:00 exist
+                dose(1, "2099-01-05T08:00", null),
+                medicine(2, 1, "Вітамін A", "", true), period(2, "2099-03-01", 30),
+                "UPDATE medicine SET schedule_times='20:00' WHERE id=2");
+        assertThat(migratedMedicines()).hasSize(2);
+    }
+
+    @Test
+    void runningMedicineWithSameScheduleMerged() {
+        migrateTo("2");
+        persons();
+        sql(medicine(1, 1, "Вітамін A", "", true), period(1, "2099-01-01", 30),
+                dose(1, "2099-01-05T08:00", null),
+                medicine(2, 1, "Вітамін A", "", true), period(2, "2099-03-01", 30));
+        assertThat(migratedMedicines()).hasSize(1);
     }
 }

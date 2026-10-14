@@ -1,8 +1,10 @@
 package ua.medicine.service;
 
+import ua.medicine.domain.Course;
 import ua.medicine.domain.DoseOccurrence;
 import ua.medicine.domain.Medicine;
 import ua.medicine.domain.Period;
+import ua.medicine.domain.PeriodUnit;
 import ua.medicine.domain.SyncState;
 import ua.medicine.persistence.DoseRepository;
 import ua.medicine.persistence.MedicineRepository;
@@ -11,6 +13,7 @@ import ua.medicine.schedule.ScheduleExpander;
 import java.time.Clock;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashSet;
@@ -88,14 +91,32 @@ public final class MedicineService {
                 fromForm.color(), periods, fromForm.schedule(), true));
     }
 
+    /**
+     * Periods of a medicine deleted today: the running one ends today and later ones are dropped, so the medicine
+     * can be taken again later. A medicine that never started keeps its periods.
+     */
+    private static List<Period> endedToday(List<Period> periods, LocalDate today) {
+        List<Period> started = periods.stream().filter(p -> !p.start().isAfter(today)).toList();
+        if (started.isEmpty()) {
+            return periods;
+        }
+        List<Period> result = new ArrayList<>(started);
+        Period last = result.getLast();
+        if (last.contains(today)) {
+            int days = (int) ChronoUnit.DAYS.between(last.start(), today) + 1;
+            result.set(result.size() - 1, last.withCourse(new Course.Fixed(days, PeriodUnit.DAYS)));
+        }
+        return result;
+    }
+
     private static String nameKey(String name) {
         return name.strip().toLowerCase(Locale.ROOT);
     }
 
-    /** Deactivates the medicine and removes its future, not-taken doses; history stays. */
+    /** Deactivates the medicine, ends its running period today and removes its future, not-taken doses; history stays. */
     public void delete(long medicineId) {
         medicines.findById(medicineId).ifPresent(m -> {
-            medicines.save(m.withActive(false));
+            medicines.save(m.withPeriods(endedToday(m.periods(), LocalDate.now(clock))).withActive(false));
             doses.findFutureUntaken(medicineId, LocalDateTime.now(clock)).stream()
                     .filter(d -> d.syncState() != SyncState.DELETE_PENDING)
                     .forEach(this::remove);
