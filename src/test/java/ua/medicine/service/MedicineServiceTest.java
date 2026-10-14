@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 import ua.medicine.domain.Course;
 import ua.medicine.domain.DoseOccurrence;
 import ua.medicine.domain.Medicine;
+import ua.medicine.domain.Period;
 import ua.medicine.domain.Person;
 import ua.medicine.domain.Schedule;
 import ua.medicine.persistence.Database;
@@ -18,11 +19,13 @@ import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static ua.medicine.domain.PeriodUnit.DAYS;
 import static ua.medicine.domain.SyncState.DELETE_PENDING;
 import static ua.medicine.testutil.T.d;
 import static ua.medicine.testutil.T.dt;
 import static ua.medicine.testutil.T.med;
+import static ua.medicine.testutil.T.p;
 import static ua.medicine.testutil.T.t;
 
 class MedicineServiceTest {
@@ -139,5 +142,82 @@ class MedicineServiceTest {
         svc.update(m.withSchedule(new Schedule.Daily(List.of(t("09:00")))));
         svc.delete(m.id());
         assertThat(syncRequests).hasValue(3);
+    }
+
+    private Medicine twoDays() {
+        return med(pid, d("2026-10-13"), new Course.Fixed(2, DAYS), new Schedule.Daily(List.of(t("08:00"), t("20:00"))));
+    }
+
+    private static Period oct20() {
+        return p("2026-10-20", new Course.Fixed(3, DAYS));
+    }
+
+    @Test
+    void addingPeriodGeneratesDosesOnlyInside() {
+        var m = svc.create(twoDays());
+        svc.update(m.withPeriods(List.of(m.lastPeriod(), oct20())));
+        assertThat(dosesBetween(m, "2026-10-13T00:00", "2026-12-01T00:00"))
+                .extracting(dose -> dose.scheduledAt().getDayOfMonth()).containsOnly(13, 14, 20, 21, 22);
+        assertThat(dosesBetween(m, "2026-10-20T00:00", "2026-10-23T00:00")).hasSize(6);
+    }
+
+    @Test
+    void updateKeepsTakenDosesOfEarlierPeriods() {
+        var m = svc.create(twoDays());
+        doseRepo.update(doseAt(m, "2026-10-13T08:00").withTakenAt(dt("2026-10-13T08:05")));
+        svc.update(m.withPeriods(List.of(m.lastPeriod(), oct20())));
+        assertThat(doseAt(m, "2026-10-13T08:00").takenAt()).isEqualTo(dt("2026-10-13T08:05"));
+    }
+
+    @Test
+    void removingFuturePeriodDropsItsDoses() {
+        var m = svc.create(twoDays().withPeriods(List.of(twoDays().lastPeriod(), oct20())));
+        doseRepo.update(doseAt(m, "2026-10-20T08:00").withCalendarEventId("ev"));
+        svc.update(m.withPeriods(List.of(m.periods().getFirst())));
+        assertThat(dosesBetween(m, "2026-10-15T00:00", "2026-12-01T00:00")).isEmpty();
+        assertThat(doseRepo.findNeedingSync(pid)).filteredOn(dose -> dose.syncState() == DELETE_PENDING)
+                .singleElement().satisfies(dose -> assertThat(dose.scheduledAt()).isEqualTo(dt("2026-10-20T08:00")));
+    }
+
+    @Test
+    void findSameNameIgnoresCaseAndSpaces() {
+        var saved = svc.create(named("Вітамін A"));
+        assertThat(svc.findSameName(pid, " вітамін a ")).contains(saved);
+        assertThat(svc.findSameName(pid + 1, "Вітамін A")).isEmpty();
+    }
+
+    @Test
+    void findSameNamePrefersActive() {
+        var deleted = svc.create(named("Вітамін A"));
+        svc.delete(deleted.id());
+        var active = svc.create(named("вітамін a").withPeriods(List.of(p("2026-01-01", new Course.Fixed(2, DAYS)))));
+        assertThat(svc.findSameName(pid, "Вітамін A")).contains(active);
+    }
+
+    @Test
+    void appendPeriodsReactivates() {
+        var existing = svc.create(named("Вітамін A"));
+        svc.delete(existing.id());
+        var form = new Medicine(null, pid, "вітамін a", "2 краплі", "#3a7bd5", List.of(oct20()),
+                new Schedule.Daily(List.of(t("09:00"))), true);
+        var merged = svc.appendPeriods(existing.id(), form);
+        assertThat(merged.active()).isTrue();
+        assertThat(merged.periods()).containsExactly(existing.lastPeriod(), oct20());
+        assertThat(merged.dosage()).isEqualTo("2 краплі");
+        assertThat(merged.name()).isEqualTo("Вітамін A");
+        assertThat(medicineRepo.findById(existing.id())).contains(merged);
+    }
+
+    @Test
+    void appendOverlappingPeriodThrows() {
+        var existing = svc.create(named("Вітамін A"));
+        var form = named("Вітамін A").withPeriods(List.of(p("2026-10-14", new Course.Fixed(3, DAYS))));
+        assertThatThrownBy(() -> svc.appendPeriods(existing.id(), form)).isInstanceOf(IllegalArgumentException.class);
+        assertThat(medicineRepo.findById(existing.id()).orElseThrow().periods()).hasSize(1);
+    }
+
+    private Medicine named(String name) {
+        var m = twoDays();
+        return new Medicine(null, pid, name, m.dosage(), m.color(), m.periods(), m.schedule(), true);
     }
 }

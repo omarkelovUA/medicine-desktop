@@ -64,6 +64,11 @@ public final class MedicineRepository {
         return query("SELECT * FROM medicine WHERE active=1 AND person_id=? ORDER BY name, id", personId);
     }
 
+    /** Active and deleted medicines of the person. */
+    public List<Medicine> findAllByPerson(long personId) {
+        return query("SELECT * FROM medicine WHERE person_id=? ORDER BY name, id", personId);
+    }
+
     public List<Medicine> findAll() {
         return query("SELECT * FROM medicine ORDER BY name, id");
     }

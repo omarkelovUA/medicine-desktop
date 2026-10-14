@@ -9,10 +9,8 @@ import javafx.scene.control.Button;
 import javafx.scene.control.ButtonBar;
 import javafx.scene.control.ButtonType;
 import javafx.scene.control.ComboBox;
-import javafx.scene.control.DatePicker;
 import javafx.scene.control.Dialog;
 import javafx.scene.control.Label;
-import javafx.scene.control.ListCell;
 import javafx.scene.control.RadioButton;
 import javafx.scene.control.Spinner;
 import javafx.scene.control.TextField;
@@ -25,7 +23,6 @@ import javafx.stage.Window;
 import javafx.util.StringConverter;
 import ua.medicine.AppContext;
 import ua.medicine.domain.Medicine;
-import ua.medicine.domain.PeriodUnit;
 import ua.medicine.domain.Person;
 import ua.medicine.i18n.Formats;
 import ua.medicine.i18n.Messages;
@@ -35,6 +32,7 @@ import java.time.LocalDate;
 import java.time.LocalTime;
 import java.time.format.TextStyle;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.EnumMap;
 import java.util.EnumSet;
 import java.util.List;
@@ -54,12 +52,10 @@ public final class MedicineDialogController {
     private final TextField name = new TextField();
     private final TextField dosage = new TextField();
     private final ColorPicker color;
-    private final DatePicker start = new DatePicker();
-    private final RadioButton fixed = new RadioButton(Messages.get("duration.fixed"));
-    private final RadioButton ongoing = new RadioButton(Messages.get("duration.ongoing"));
-    private final Spinner<Integer> amount = new Spinner<>(1, 999, 10);
-    private final ComboBox<PeriodUnit> unit = new ComboBox<>(FXCollections.observableArrayList(PeriodUnit.values()));
-    private final Label endLabel = new Label();
+    private final List<PeriodEditor> periodEditors = new ArrayList<>();
+    private final VBox periodsBox = new VBox(6);
+    private final Button addPeriod = new Button(Messages.get("btn.addPeriod"));
+    private final Label addPeriodHint = new Label(Messages.get("tooltip.endOngoingFirst"));
     private final RadioButton daily = new RadioButton(Messages.get("freq.daily"));
     private final RadioButton weekly = new RadioButton(Messages.get("freq.weekly"));
     private final RadioButton monthly = new RadioButton(Messages.get("freq.monthly"));
@@ -72,7 +68,8 @@ public final class MedicineDialogController {
     private final Spinner<Integer> hour = new Spinner<>(0, 23, 8);
     private final Spinner<Integer> minute = new Spinner<>(0, 59, 0, 5);
     private final Map<String, Label> errors = Map.of(
-            "name", errorLabel(), "amount", errorLabel(), "weekdays", errorLabel(), "times", errorLabel());
+            "name", errorLabel(), "amount", errorLabel(), "periods", errorLabel(), "weekdays", errorLabel(),
+            "times", errorLabel());
 
     private MedicineDialogController(AppContext ctx, Medicine existing, Long preselectedPersonId) {
         this.ctx = ctx;
@@ -100,34 +97,11 @@ public final class MedicineDialogController {
         // moving a medicine to another person would leave its events in the old calendar
         person.setDisable(existing != null);
 
-        var durationGroup = new ToggleGroup();
-        fixed.setToggleGroup(durationGroup);
-        ongoing.setToggleGroup(durationGroup);
         var frequencyGroup = new ToggleGroup();
         daily.setToggleGroup(frequencyGroup);
         weekly.setToggleGroup(frequencyGroup);
         monthly.setToggleGroup(frequencyGroup);
 
-        unit.setConverter(new StringConverter<>() {
-            @Override
-            public String toString(PeriodUnit u) {
-                return u == null ? "" : Messages.get("unit." + u.name().toLowerCase());
-            }
-
-            @Override
-            public PeriodUnit fromString(String s) {
-                return null;
-            }
-        });
-        unit.setButtonCell(new ListCell<>() {
-            @Override
-            protected void updateItem(PeriodUnit item, boolean empty) {
-                super.updateItem(item, empty);
-                setText(empty || item == null ? "" : unit.getConverter().toString(item));
-            }
-        });
-        amount.setEditable(true);
-        amount.setPrefWidth(80);
         dayOfMonth.setEditable(true);
         dayOfMonth.setPrefWidth(80);
         hour.setPrefWidth(70);
@@ -146,13 +120,7 @@ public final class MedicineDialogController {
         if (form != null) {
             name.setText(form.name());
             dosage.setText(form.dosage());
-            MedicineForm.PeriodRow row = form.periods().getLast();
-            start.setValue(row.start());
-            (row.ongoing() ? ongoing : fixed).setSelected(true);
-            if (row.amount() != null) {
-                amount.getValueFactory().setValue(row.amount());
-            }
-            unit.setValue(row.unit());
+            form.periods().forEach(this::addPeriodEditor);
             switch (form.frequency()) {
                 case MedicineForm.WEEKLY -> weekly.setSelected(true);
                 case MedicineForm.MONTHLY -> monthly.setSelected(true);
@@ -162,18 +130,18 @@ public final class MedicineDialogController {
             dayOfMonth.getValueFactory().setValue(form.dayOfMonth());
             times.addAll(form.times());
         } else {
-            start.setValue(LocalDate.now(ctx.clock()));
-            fixed.setSelected(true);
-            unit.setValue(PeriodUnit.DAYS);
+            addPeriodEditor(MedicineForm.nextPeriod(List.of(), LocalDate.now(ctx.clock())));
             daily.setSelected(true);
             times.add(LocalTime.of(8, 0));
         }
 
-        durationGroup.selectedToggleProperty().addListener((o, a, b) -> updateVisibility());
         frequencyGroup.selectedToggleProperty().addListener((o, a, b) -> updateVisibility());
-        amount.valueProperty().addListener((o, a, b) -> updateEndLabel());
-        unit.valueProperty().addListener((o, a, b) -> updateEndLabel());
-        start.valueProperty().addListener((o, a, b) -> updateEndLabel());
+        addPeriod.setOnAction(e -> {
+            addPeriodEditor(MedicineForm.nextPeriod(periodRows(), LocalDate.now(ctx.clock())));
+            updatePeriodButtons();
+            sizeToScene();
+        });
+        updatePeriodButtons();
         renderTimes();
         updateVisibility();
     }
@@ -228,20 +196,28 @@ public final class MedicineDialogController {
     private boolean trySave() {
         MedicineForm form = form();
         Map<String, String> problems = form.validate();
-        errors.forEach((field, label) -> {
-            String key = problems.get(field);
-            label.setText(key == null ? "" : Messages.get(key));
-            label.setVisible(key != null);
-            label.setManaged(key != null);
-        });
+        errors.keySet().forEach(field -> showError(field, problems.get(field)));
         if (!problems.isEmpty() || form.personId() == null) {
-            name.getScene().getWindow().sizeToScene();
             return false;
         }
         try {
-            savedMedicine = existing == null
-                    ? ctx.medicineService().create(form.toMedicine(null, true))
-                    : ctx.medicineService().update(form.toMedicine(existing.id(), existing.active()));
+            if (existing != null) {
+                savedMedicine = ctx.medicineService().update(form.toMedicine(existing.id(), existing.active()));
+                return true;
+            }
+            Medicine fromForm = form.toMedicine(null, true);
+            Optional<Medicine> sameName = ctx.medicineService().findSameName(fromForm.personId(), fromForm.name());
+            if (sameName.isPresent() && Dialogs.confirm(name.getScene().getWindow(),
+                    Messages.get("confirm.addPeriodToExisting", sameName.get().name()))) {
+                try {
+                    savedMedicine = ctx.medicineService().appendPeriods(sameName.get().id(), fromForm);
+                } catch (IllegalArgumentException overlap) {
+                    showError("periods", "error.periodsOverlap");
+                    return false;
+                }
+            } else {
+                savedMedicine = ctx.medicineService().create(fromForm);
+            }
             return true;
         } catch (RuntimeException e) {
             Dialogs.dbError(name.getScene().getWindow(), e);
@@ -260,14 +236,13 @@ public final class MedicineDialogController {
                 : monthly.isSelected() ? MedicineForm.MONTHLY : MedicineForm.DAILY;
         Person p = person.getValue();
         return new MedicineForm(p == null ? null : p.id(), name.getText(), dosage.getText(), color.selected(),
-                List.of(new MedicineForm.PeriodRow(start.getValue() != null ? start.getValue() : LocalDate.now(ctx.clock()),
-                        ongoing.isSelected(), amount.getValue(), unit.getValue())),
-                frequency, days, dayOfMonth.getValue(), List.copyOf(times));
+                periodRows(), frequency, days, dayOfMonth.getValue(), List.copyOf(times));
     }
 
     private Node content() {
-        var durationRow = new HBox(8, fixed, ongoing, amount, unit);
-        durationRow.setAlignment(Pos.CENTER_LEFT);
+        addPeriodHint.getStyleClass().add("muted");
+        var addPeriodRow = new HBox(8, addPeriod, addPeriodHint);
+        addPeriodRow.setAlignment(Pos.CENTER_LEFT);
         var frequencyRow = new HBox(12, daily, weekly, monthly);
         var addTime = new Button(Messages.get("btn.addTime"));
         addTime.setOnAction(e -> {
@@ -282,8 +257,7 @@ public final class MedicineDialogController {
                 formLabel("field.name"), name, errors.get("name"),
                 formLabel("field.dosage"), dosage,
                 formLabel("field.color"), color,
-                formLabel("field.start"), start,
-                formLabel("field.duration"), durationRow, endLabel, errors.get("amount"),
+                formLabel("field.periods"), periodsBox, addPeriodRow, errors.get("amount"), errors.get("periods"),
                 formLabel("field.frequency"), frequencyRow, weekdaysRow, dayOfMonthRow, errors.get("weekdays"),
                 formLabel("field.times"), timesPane, timeEntry, errors.get("times"));
         box.setPadding(new Insets(8));
@@ -309,27 +283,67 @@ public final class MedicineDialogController {
         }
     }
 
+    private void addPeriodEditor(MedicineForm.PeriodRow row) {
+        var editor = new PeriodEditor(row, this::updatePeriodButtons);
+        editor.remove.setOnAction(e -> {
+            periodEditors.remove(editor);
+            periodsBox.getChildren().remove(editor);
+            updatePeriodButtons();
+            sizeToScene();
+        });
+        editor.endToday.setOnAction(e -> {
+            editor.set(MedicineForm.endToday(editor.row(), LocalDate.now(ctx.clock())));
+            updatePeriodButtons();
+        });
+        periodEditors.add(editor);
+        periodsBox.getChildren().add(editor);
+    }
+
+    /** Rows of the periods section; a cleared start date counts as today. */
+    private List<MedicineForm.PeriodRow> periodRows() {
+        LocalDate today = LocalDate.now(ctx.clock());
+        return periodEditors.stream().map(PeriodEditor::row)
+                .map(r -> r.start() != null ? r : new MedicineForm.PeriodRow(today, r.ongoing(), r.amount(), r.unit()))
+                .toList();
+    }
+
+    private void updatePeriodButtons() {
+        LocalDate today = LocalDate.now(ctx.clock());
+        List<MedicineForm.PeriodRow> rows = periodRows();
+        for (int i = 0; i < periodEditors.size(); i++) {
+            PeriodEditor editor = periodEditors.get(i);
+            editor.remove.setDisable(periodEditors.size() == 1);
+            boolean canEnd = rows.get(i).ongoing() && !rows.get(i).start().isAfter(today);
+            editor.endToday.setVisible(canEnd);
+            editor.endToday.setManaged(canEnd);
+        }
+        boolean lastOngoing = rows.stream().max(Comparator.comparing(MedicineForm.PeriodRow::start))
+                .map(MedicineForm.PeriodRow::ongoing).orElse(false);
+        addPeriod.setDisable(lastOngoing);
+        // a disabled button shows no tooltip, so the hint is a label beside it
+        addPeriodHint.setVisible(lastOngoing);
+        addPeriodHint.setManaged(lastOngoing);
+    }
+
+    private void showError(String field, String key) {
+        Label label = errors.get(field);
+        label.setText(key == null ? "" : Messages.get(key));
+        label.setVisible(key != null);
+        label.setManaged(key != null);
+        sizeToScene();
+    }
+
+    private void sizeToScene() {
+        if (name.getScene() != null) {
+            name.getScene().getWindow().sizeToScene();
+        }
+    }
+
     private void updateVisibility() {
-        boolean isFixed = fixed.isSelected();
-        amount.setDisable(!isFixed);
-        unit.setDisable(!isFixed);
-        endLabel.setVisible(isFixed);
-        endLabel.setManaged(isFixed);
         weekdaysRow.setVisible(weekly.isSelected());
         weekdaysRow.setManaged(weekly.isSelected());
         dayOfMonthRow.setVisible(monthly.isSelected());
         dayOfMonthRow.setManaged(monthly.isSelected());
-        updateEndLabel();
-    }
-
-    private void updateEndLabel() {
-        if (start.getValue() == null || unit.getValue() == null || amount.getValue() == null) {
-            endLabel.setText("");
-            return;
-        }
-        LocalDate end = start.getValue().plus(amount.getValue(), unit.getValue().chronoUnit()).minusDays(1);
-        endLabel.setText(Messages.get("field.end", Formats.date(end)) + "  (" + Formats.amount(amount.getValue(), unit.getValue()) + ")");
-        endLabel.getStyleClass().setAll("label", "muted");
     }
 
     private static Label formLabel(String key) {

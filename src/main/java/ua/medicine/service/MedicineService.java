@@ -2,6 +2,7 @@ package ua.medicine.service;
 
 import ua.medicine.domain.DoseOccurrence;
 import ua.medicine.domain.Medicine;
+import ua.medicine.domain.Period;
 import ua.medicine.domain.SyncState;
 import ua.medicine.persistence.DoseRepository;
 import ua.medicine.persistence.MedicineRepository;
@@ -10,8 +11,12 @@ import ua.medicine.schedule.ScheduleExpander;
 import java.time.Clock;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
+import java.util.Optional;
 import java.util.Set;
 
 /** Medicine CRUD plus keeping doses generated up to today + {@value #WINDOW_DAYS} days. */
@@ -55,6 +60,36 @@ public final class MedicineService {
         insert(saved, wanted);
         syncTrigger.requestSync();
         return saved;
+    }
+
+    /**
+     * The person's medicine with the same name, ignoring case and surrounding spaces: an active one first,
+     * else the one whose last period started latest.
+     */
+    public Optional<Medicine> findSameName(long personId, String name) {
+        String key = nameKey(name);
+        return medicines.findAllByPerson(personId).stream()
+                .filter(m -> nameKey(m.name()).equals(key))
+                .max(Comparator.comparing(Medicine::active)
+                        .thenComparing(m -> m.lastPeriod().start())
+                        .thenComparing(Medicine::id));
+    }
+
+    /**
+     * Adds the form's periods to an existing medicine (taking dosage, colour and schedule from the form) and makes
+     * it active. Throws {@link IllegalArgumentException} without saving when the periods overlap.
+     */
+    public Medicine appendPeriods(long existingId, Medicine fromForm) {
+        Medicine existing = medicines.findById(existingId).orElseThrow();
+        List<Period> periods = new ArrayList<>(existing.periods());
+        periods.addAll(fromForm.periods());
+        periods.sort(Comparator.comparing(Period::start));
+        return update(new Medicine(existing.id(), existing.personId(), existing.name(), fromForm.dosage(),
+                fromForm.color(), periods, fromForm.schedule(), true));
+    }
+
+    private static String nameKey(String name) {
+        return name.strip().toLowerCase(Locale.ROOT);
     }
 
     /** Deactivates the medicine and removes its future, not-taken doses; history stays. */
