@@ -1,5 +1,6 @@
 package ua.medicine.i18n;
 
+import ua.medicine.domain.Period;
 import ua.medicine.domain.PeriodUnit;
 import ua.medicine.domain.Schedule;
 import ua.medicine.schedule.CourseProgress;
@@ -8,6 +9,7 @@ import java.time.LocalDate;
 import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
 import java.time.format.TextStyle;
+import java.util.List;
 import java.util.stream.Collectors;
 
 /** Ukrainian formatting of dates, times, amounts and schedules. */
@@ -15,6 +17,7 @@ public final class Formats {
 
     private static final DateTimeFormatter TIME = DateTimeFormatter.ofPattern("HH:mm", Messages.LOCALE);
     private static final DateTimeFormatter DATE = DateTimeFormatter.ofPattern("dd.MM.yyyy", Messages.LOCALE);
+    private static final DateTimeFormatter DAY_MONTH_NUMERIC = DateTimeFormatter.ofPattern("dd.MM", Messages.LOCALE);
     private static final DateTimeFormatter DAY_MONTH = DateTimeFormatter.ofPattern("d MMMM", Messages.LOCALE);
     private static final DateTimeFormatter DAY_HEADER = DateTimeFormatter.ofPattern("EEEE, d MMMM", Messages.LOCALE);
 
@@ -27,6 +30,18 @@ public final class Formats {
 
     public static String date(LocalDate date) {
         return DATE.format(date);
+    }
+
+    /** {@code 01.01–30.01.2026}, {@code 15.12.2025–14.01.2026}, or {@code 01.08.2026–…} for ongoing. */
+    public static String periodRange(Period p) {
+        return p.endDate()
+                .map(end -> (end.getYear() == p.start().getYear() ? DAY_MONTH_NUMERIC.format(p.start()) : date(p.start()))
+                        + "–" + date(end))
+                .orElseGet(() -> date(p.start()) + "–…");
+    }
+
+    public static String periodRanges(List<Period> periods) {
+        return periods.stream().map(Formats::periodRange).collect(Collectors.joining(" · "));
     }
 
     public static String dayMonth(LocalDate date) {

@@ -1,6 +1,7 @@
 package ua.medicine.i18n;
 
 import org.junit.jupiter.api.Test;
+import ua.medicine.domain.Course;
 import ua.medicine.domain.PeriodUnit;
 import ua.medicine.domain.Schedule;
 import ua.medicine.schedule.CourseProgress;
@@ -13,6 +14,7 @@ import java.util.Set;
 import static java.time.DayOfWeek.MONDAY;
 import static java.time.DayOfWeek.THURSDAY;
 import static org.assertj.core.api.Assertions.assertThat;
+import static ua.medicine.testutil.T.p;
 
 class FormatsTest {
 
@@ -65,5 +67,27 @@ class FormatsTest {
     @Test
     void monthlySummary() {
         assertThat(Formats.scheduleSummary(new Schedule.Monthly(1, List.of(LocalTime.NOON)))).isEqualTo("щомісяця 1-го");
+    }
+
+    @Test
+    void periodRangeSameYear() {
+        assertThat(Formats.periodRange(p("2026-01-01", new Course.Fixed(30, PeriodUnit.DAYS)))).isEqualTo("01.01–30.01.2026");
+    }
+
+    @Test
+    void periodRangeAcrossYears() {
+        assertThat(Formats.periodRange(p("2025-12-15", new Course.Fixed(31, PeriodUnit.DAYS))))
+                .isEqualTo("15.12.2025–14.01.2026");
+    }
+
+    @Test
+    void periodRangeOngoing() {
+        assertThat(Formats.periodRange(p("2026-08-01", new Course.Ongoing()))).isEqualTo("01.08.2026–…");
+    }
+
+    @Test
+    void periodRangesJoined() {
+        assertThat(Formats.periodRanges(List.of(p("2026-01-01", new Course.Fixed(30, PeriodUnit.DAYS)),
+                p("2026-08-01", new Course.Ongoing())))).isEqualTo("01.01–30.01.2026 · 01.08.2026–…");
     }
 }
