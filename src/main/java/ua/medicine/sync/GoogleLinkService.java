@@ -25,15 +25,25 @@ public final class GoogleLinkService {
         this.syncTrigger = syncTrigger;
     }
 
-    /** Runs the browser consent flow (blocking, always fresh consent), then pushes all of the person's doses. */
+    /** Runs the browser consent flow (blocking, always fresh consent), then pushes the person's doses to a new calendar. */
     public Person link(long personId) {
         Person person = find(personId);
         GoogleCalendarGateway gateway = gateways.forCredential(auth.authorize(personId));
         String email = gateway.primaryEmail();
-        String calendarId = gateway.ensureCalendar(CALENDAR_NAME);
-        Person linked = persons.save(person.withGoogle(email, calendarId));
-        doses.markDirtyForPerson(personId);
+        Person linked = saveLink(person, email, gateway.ensureCalendar(CALENDAR_NAME));
         syncTrigger.requestSync();
+        return linked;
+    }
+
+    /**
+     * Re-linking to the same calendar (e.g. after the token expired) leaves the doses as they are: the events
+     * are still there, and pushing them all would overwrite marks made on the phone that are not pulled yet.
+     */
+    Person saveLink(Person person, String email, String calendarId) {
+        Person linked = persons.save(person.withGoogle(email, calendarId));
+        if (!calendarId.equals(person.googleCalendarId())) {
+            doses.markDirtyForPerson(person.id());
+        }
         return linked;
     }
 
