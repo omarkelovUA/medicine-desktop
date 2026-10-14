@@ -17,7 +17,8 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
 /**
- * Periodic work every 30 s: new-day handling, reminders, dashboard refresh; sync every 15 min.
+ * Periodic work every 30 s: new-day handling, reminders, dashboard refresh; sync every 5 min, which also picks up
+ * doses marked on the phone.
  * The day change is detected from the date on each tick rather than by a midnight timer, because
  * scheduled delays do not advance while the computer sleeps.
  */
@@ -45,7 +46,7 @@ public final class AppJobs {
 
     public void start() {
         timer.scheduleAtFixedRate(() -> Platform.runLater(this::tick), 0, 30, TimeUnit.SECONDS);
-        timer.scheduleAtFixedRate(() -> ctx.sync().requestSync(), 15, 15, TimeUnit.MINUTES);
+        timer.scheduleAtFixedRate(() -> ctx.sync().requestSync(), 5, 5, TimeUnit.MINUTES);
     }
 
     public void stop() {
