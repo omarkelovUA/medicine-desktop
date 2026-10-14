@@ -45,6 +45,7 @@ public final class HistoryController {
     private final ComboBox<Choice<Long>> person = new ComboBox<>();
     private final ComboBox<Choice<Long>> medicine = new ComboBox<>();
     private final ComboBox<Choice<Integer>> period = new ComboBox<>();
+    private final Label periods = new Label();
     private final FlowPane tiles = new FlowPane(10, 10);
     private final TableView<HistoryRow> table = new TableView<>();
 
@@ -89,6 +90,7 @@ public final class HistoryController {
                 column("history.col.time", r -> DATE_TIME.format(r.scheduledAt())),
                 column("history.col.person", HistoryRow::personName),
                 column("history.col.medicine", HistoryRow::medicineName),
+                column("history.col.period", HistoryRow::period),
                 statusColumn(),
                 column("history.col.takenAt", r -> r.takenAt() == null ? "—" : takenAtText(r))));
         table.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY_FLEX_LAST_COLUMN);
@@ -98,7 +100,8 @@ public final class HistoryController {
         title.getStyleClass().add("app-title");
         var filters = new HBox(8, title, person, medicine, period);
         filters.setAlignment(Pos.CENTER_LEFT);
-        var root = new VBox(12, filters, tiles, table);
+        periods.getStyleClass().add("muted");
+        var root = new VBox(12, filters, periods, tiles, table);
         root.setPadding(new Insets(16));
         root.getStyleClass().add("app-root");
         reload();
@@ -118,6 +121,10 @@ public final class HistoryController {
     private void reload() {
         var filter = new HistoryFilter(person.getValue().value(), medicine.getValue().value(), period.getValue().value());
         try {
+            var line = ctx.historyService().periodsLine(filter.medicineId());
+            periods.setText(line.orElse(""));
+            periods.setVisible(line.isPresent());
+            periods.setManaged(line.isPresent());
             tiles.getChildren().clear();
             ctx.historyService().adherence(filter).forEach((m, adherence) -> {
                 var name = new Label(m.name());

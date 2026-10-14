@@ -72,6 +72,19 @@ final class Steps {
                 }
             };
         }
+        if (name.startsWith("history:")) { // history window with the medicine whose label starts with the given name
+            String medicine = name.substring("history:".length());
+            return app -> {
+                clickButton(app.dashboard().stage(), "Історія");
+                later(300, () -> Window.getWindows().stream()
+                        .flatMap(w -> w.getScene().getRoot().lookupAll(".combo-box").stream())
+                        .map(n -> (javafx.scene.control.ComboBox<?>) n)
+                        .forEach(combo -> combo.getItems().stream()
+                                .filter(item -> item.toString().startsWith(medicine))
+                                .findFirst()
+                                .ifPresent(item -> select(combo, item))));
+            };
+        }
         return STEPS.getOrDefault(name, app -> {
         });
     }
@@ -80,6 +93,11 @@ final class Steps {
         root.lookupAll(".toggle-button").stream()
                 .filter(n -> n instanceof ButtonBase b && text.equals(b.getText()))
                 .findFirst().ifPresent(n -> ((ButtonBase) n).fire());
+    }
+
+    @SuppressWarnings("unchecked")
+    private static <T> void select(javafx.scene.control.ComboBox<T> combo, Object item) {
+        combo.getSelectionModel().select((T) item); // fires the combo's onAction
     }
 
     static void later(int millis, Runnable r) {

@@ -4,6 +4,8 @@ import ua.medicine.domain.DoseOccurrence;
 import ua.medicine.domain.DoseStatus;
 import ua.medicine.domain.Medicine;
 import ua.medicine.domain.Person;
+import ua.medicine.i18n.Formats;
+import ua.medicine.i18n.Messages;
 import ua.medicine.persistence.DoseRepository;
 import ua.medicine.persistence.MedicineRepository;
 import ua.medicine.persistence.PersonRepository;
@@ -16,6 +18,7 @@ import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -54,6 +57,15 @@ public final class HistoryService {
                 .toList();
     }
 
+    /** «Періоди: …» for one medicine; empty for «Усі ліки». */
+    public Optional<String> periodsLine(Long medicineId) {
+        if (medicineId == null) {
+            return Optional.empty();
+        }
+        return medicines.findById(medicineId)
+                .map(m -> Messages.get("history.periods", Formats.periodRanges(m.periods())));
+    }
+
     /** Doses scheduled up to now, newest first. */
     public List<HistoryRow> rows(HistoryFilter filter) {
         LocalDateTime now = LocalDateTime.now(clock);
@@ -64,8 +76,9 @@ public final class HistoryService {
                 .sorted(Comparator.comparing(DoseOccurrence::scheduledAt).reversed())
                 .map(d -> {
                     Medicine m = medicineById.get(d.medicineId());
+                    String period = m.periodAt(d.scheduledAt().toLocalDate()).map(Formats::periodRange).orElse("");
                     return new HistoryRow(d.scheduledAt(), personById.get(m.personId()).name(), m.name(),
-                            DoseStatusResolver.statusOf(d, now), d.takenAt());
+                            DoseStatusResolver.statusOf(d, now), d.takenAt(), period);
                 })
                 .toList();
     }

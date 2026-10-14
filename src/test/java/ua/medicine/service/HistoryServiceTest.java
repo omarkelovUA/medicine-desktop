@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 import ua.medicine.domain.Course;
 import ua.medicine.domain.DoseOccurrence;
 import ua.medicine.domain.Medicine;
+import ua.medicine.domain.PeriodUnit;
 import ua.medicine.domain.Person;
 import ua.medicine.domain.Schedule;
 import ua.medicine.persistence.Database;
@@ -23,6 +24,7 @@ import static ua.medicine.domain.DoseStatus.TAKEN;
 import static ua.medicine.testutil.T.d;
 import static ua.medicine.testutil.T.dt;
 import static ua.medicine.testutil.T.med;
+import static ua.medicine.testutil.T.p;
 import static ua.medicine.testutil.T.t;
 
 class HistoryServiceTest {
@@ -108,5 +110,39 @@ class HistoryServiceTest {
         assertThat(history.medicineChoices(null)).containsExactly(
                 new HistoryService.MedicineChoice(amox.id(), "Амоксицилін (Марія)"),
                 new HistoryService.MedicineChoice(hers.id(), "Амоксицилін (Софія)"));
+    }
+
+    private Medicine vitaminA() {
+        return medicineRepo.save(med(maria.id(), d("2026-01-01"), new Course.Fixed(30, PeriodUnit.DAYS),
+                new Schedule.Daily(List.of(t("08:00")))).withPeriods(List.of(
+                p("2026-01-01", new Course.Fixed(30, PeriodUnit.DAYS)), p("2026-08-01", new Course.Ongoing()))));
+    }
+
+    private HistoryRow onlyRow(Medicine m) {
+        return history.rows(new HistoryFilter(null, m.id(), null)).getFirst();
+    }
+
+    @Test
+    void rowCarriesPeriodRange() {
+        var m = vitaminA();
+        doseRepo.insertAll(List.of(planned(m.id(), dt("2026-01-05T08:00"))));
+        assertThat(onlyRow(m).period()).isEqualTo("01.01–30.01.2026");
+    }
+
+    @Test
+    void doseOutsidePeriodsHasEmptyPeriod() {
+        var m = vitaminA();
+        doseRepo.insertAll(List.of(planned(m.id(), dt("2026-05-01T08:00"))));
+        assertThat(onlyRow(m).period()).isEmpty();
+    }
+
+    @Test
+    void periodsLineListsAll() {
+        assertThat(history.periodsLine(vitaminA().id())).contains("Періоди: 01.01–30.01.2026 · 01.08.2026–…");
+    }
+
+    @Test
+    void periodsLineEmptyForAllMedicines() {
+        assertThat(history.periodsLine(null)).isEmpty();
     }
 }
