@@ -68,7 +68,7 @@ final class TimeLabels {
 
     static String tooltip(Medicine m) {
         String title = m.dosage() == null || m.dosage().isBlank() ? m.name() : m.name() + " — " + m.dosage().trim();
-        String start = Formats.date(m.startDate());
+        String start = Formats.date(m.firstStart());
         return m.endDate()
                 .map(end -> Messages.get("timeline.tooltip.fixed", title, start, Formats.date(end)))
                 .orElseGet(() -> Messages.get("timeline.tooltip.ongoing", title, start));

@@ -17,6 +17,7 @@ import static ua.medicine.domain.PeriodUnit.DAYS;
 import static ua.medicine.domain.PeriodUnit.MONTHS;
 import static ua.medicine.testutil.T.d;
 import static ua.medicine.testutil.T.med;
+import static ua.medicine.testutil.T.p;
 import static ua.medicine.testutil.T.t;
 
 class MedicineRepositoryTest {
@@ -60,5 +61,22 @@ class MedicineRepositoryTest {
         var saved = repo.save(med(pid, d("2026-10-13"), new Course.Ongoing(), new Schedule.Daily(List.of(t("08:00")))));
         repo.save(saved.withActive(false));
         assertThat(repo.findById(saved.id())).get().extracting(Medicine::active).isEqualTo(false);
+    }
+
+    @Test
+    void periodsRoundTrip() {
+        var m = med(pid, d("2026-01-01"), new Course.Fixed(30, DAYS), new Schedule.Daily(List.of(t("08:00"))))
+                .withPeriods(List.of(p("2026-01-01", new Course.Fixed(30, DAYS)), p("2026-08-01", new Course.Ongoing())));
+        var saved = repo.save(m);
+        assertThat(repo.findById(saved.id())).contains(saved);
+    }
+
+    @Test
+    void saveReplacesPeriods() {
+        var p2 = p("2026-08-01", new Course.Fixed(30, DAYS));
+        var saved = repo.save(med(pid, d("2026-01-01"), new Course.Fixed(30, DAYS), new Schedule.Daily(List.of(t("08:00"))))
+                .withPeriods(List.of(p("2026-01-01", new Course.Fixed(30, DAYS)), p2)));
+        repo.save(saved.withPeriods(List.of(p2)));
+        assertThat(repo.findById(saved.id()).orElseThrow().periods()).containsExactly(p2);
     }
 }

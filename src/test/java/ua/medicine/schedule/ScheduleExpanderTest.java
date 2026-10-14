@@ -15,6 +15,7 @@ import static ua.medicine.domain.PeriodUnit.WEEKS;
 import static ua.medicine.testutil.T.d;
 import static ua.medicine.testutil.T.dt;
 import static ua.medicine.testutil.T.med;
+import static ua.medicine.testutil.T.p;
 import static ua.medicine.testutil.T.t;
 
 class ScheduleExpanderTest {
@@ -66,5 +67,13 @@ class ScheduleExpanderTest {
     void emptyWhenFromAfterTo() {
         var m = med(d("2026-10-13"), new Course.Ongoing(), new Schedule.Daily(List.of(t("08:00"))));
         assertThat(ScheduleExpander.expand(m, d("2026-10-20"), d("2026-10-19"))).isEmpty();
+    }
+
+    @Test
+    void noDosesDuringRest() {
+        var m = med(List.of(p("2026-01-01", new Course.Fixed(30, DAYS)), p("2026-08-01", new Course.Fixed(30, DAYS))));
+        assertThat(ScheduleExpander.expand(m, d("2026-01-29"), d("2026-08-02")))
+                .containsExactly(dt("2026-01-29T08:00"), dt("2026-01-30T08:00"),
+                        dt("2026-08-01T08:00"), dt("2026-08-02T08:00"));
     }
 }

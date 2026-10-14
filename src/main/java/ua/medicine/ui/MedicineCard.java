@@ -57,7 +57,7 @@ public final class MedicineCard extends VBox {
         detailsLabel.getStyleClass().add("muted");
         detailsLabel.setWrapText(true);
 
-        var progress = CourseProgress.of(medicine, today);
+        var progress = CourseProgress.of(medicine.relevantPeriod(today), today);
         var bar = new ProgressBar(progress.map(CourseProgress::fraction).orElse(0.0));
         bar.setMaxWidth(Double.MAX_VALUE);
         bar.getStyleClass().add("course-progress");
@@ -65,7 +65,7 @@ public final class MedicineCard extends VBox {
         bar.setManaged(progress.isPresent());
         var progressText = new Label(progress
                 .map(p -> Formats.progress(p) + " · " + Messages.get("card.until", Formats.dayMonth(p.endDate())))
-                .orElseGet(() -> Messages.get("card.ongoing", Formats.dayMonth(medicine.startDate()))));
+                .orElseGet(() -> Messages.get("card.ongoing", Formats.dayMonth(medicine.relevantPeriod(today).start()))));
         progressText.getStyleClass().add("muted");
 
         var chips = new FlowPane(6, 6);

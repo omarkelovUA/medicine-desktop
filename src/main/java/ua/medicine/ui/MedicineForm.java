@@ -2,6 +2,7 @@ package ua.medicine.ui;
 
 import ua.medicine.domain.Course;
 import ua.medicine.domain.Medicine;
+import ua.medicine.domain.Period;
 import ua.medicine.domain.PeriodUnit;
 import ua.medicine.domain.Schedule;
 
@@ -53,16 +54,17 @@ public record MedicineForm(Long personId, String name, String dosage, String col
     }
 
     public static MedicineForm from(Medicine m) {
-        boolean ongoing = m.course() instanceof Course.Ongoing;
-        Integer amount = m.course() instanceof Course.Fixed f ? f.amount() : null;
-        PeriodUnit unit = m.course() instanceof Course.Fixed f ? f.unit() : PeriodUnit.DAYS;
+        Period last = m.lastPeriod();
+        boolean ongoing = last.course() instanceof Course.Ongoing;
+        Integer amount = last.course() instanceof Course.Fixed f ? f.amount() : null;
+        PeriodUnit unit = last.course() instanceof Course.Fixed f ? f.unit() : PeriodUnit.DAYS;
         return switch (m.schedule()) {
-            case Schedule.Daily d -> new MedicineForm(m.personId(), m.name(), m.dosage(), m.color(), m.startDate(),
+            case Schedule.Daily d -> new MedicineForm(m.personId(), m.name(), m.dosage(), m.color(), last.start(),
                     ongoing, amount, unit, DAILY, EnumSet.noneOf(DayOfWeek.class), 1, d.times());
-            case Schedule.Weekly w -> new MedicineForm(m.personId(), m.name(), m.dosage(), m.color(), m.startDate(),
+            case Schedule.Weekly w -> new MedicineForm(m.personId(), m.name(), m.dosage(), m.color(), last.start(),
                     ongoing, amount, unit, WEEKLY, w.days(), 1, w.times());
             case Schedule.Monthly mo -> new MedicineForm(m.personId(), m.name(), m.dosage(), m.color(),
-                    m.startDate(), ongoing, amount, unit, MONTHLY, EnumSet.noneOf(DayOfWeek.class),
+                    last.start(), ongoing, amount, unit, MONTHLY, EnumSet.noneOf(DayOfWeek.class),
                     mo.dayOfMonth(), mo.times());
         };
     }

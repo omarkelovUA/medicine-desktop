@@ -21,7 +21,7 @@ final class TimelineRows {
     }
 
     private static final Comparator<Medicine> ORDER =
-            Comparator.comparing(Medicine::startDate).thenComparing(Medicine::name);
+            Comparator.comparing(Medicine::firstStart).thenComparing(Medicine::name);
 
     private TimelineRows() {
     }
@@ -45,7 +45,7 @@ final class TimelineRows {
     }
 
     private static boolean overlaps(Medicine m, TimeScale scale) {
-        return m.startDate().isBefore(scale.endExclusive())
+        return m.firstStart().isBefore(scale.endExclusive())
                 && m.endDate().map(end -> !end.isBefore(scale.start())).orElse(true);
     }
 }

@@ -232,9 +232,9 @@ final class TimelineView extends VBox {
         var track = gridTrack();
         addToday(track); // behind the bar and its label
         LocalDate endExclusive = m.endDate().map(end -> end.plusDays(1)).orElse(null);
-        boolean cutLeft = m.startDate().isBefore(scale.start());
+        boolean cutLeft = m.firstStart().isBefore(scale.start());
         boolean cutRight = endExclusive == null || endExclusive.isAfter(scale.endExclusive());
-        double from = scale.fraction(m.startDate());
+        double from = scale.fraction(m.firstStart());
         double to = endExclusive == null ? 1 : scale.fraction(endExclusive);
 
         var bar = new Region();

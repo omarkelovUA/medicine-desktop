@@ -66,7 +66,7 @@ class MedicineFormTest {
         var m = valid().toMedicine(null, true);
         assertThat(m.schedule()).isEqualTo(new Schedule.Weekly(Set.of(DayOfWeek.MONDAY, DayOfWeek.THURSDAY),
                 List.of(t("09:00"))));
-        assertThat(m.course()).isEqualTo(new Course.Fixed(3, PeriodUnit.MONTHS));
+        assertThat(m.lastPeriod().course()).isEqualTo(new Course.Fixed(3, PeriodUnit.MONTHS));
         assertThat(m.name()).isEqualTo("Магній B6");
     }
 
@@ -74,7 +74,7 @@ class MedicineFormTest {
     void nameAndDosageAreTrimmed() {
         var m = with("  Вітамін D ", true, null, "DAILY", Set.of(), List.of(t("08:00"))).toMedicine(null, true);
         assertThat(m.name()).isEqualTo("Вітамін D");
-        assertThat(m.course()).isEqualTo(new Course.Ongoing());
+        assertThat(m.lastPeriod().course()).isEqualTo(new Course.Ongoing());
     }
 
     @Test
