@@ -4,13 +4,18 @@ package ua.medicine.ui;
 record LabelPlacement(double x, double width, boolean inside) {
 
     static LabelPlacement of(double barX, double barW, double textW, double trackW, double pad) {
+        return of(barX, barW, textW, 0, trackW, pad);
+    }
+
+    /** Outside labels stay within [freeFrom, freeTo]: the track, or the gap between neighbouring bars of the row. */
+    static LabelPlacement of(double barX, double barW, double textW, double freeFrom, double freeTo, double pad) {
         if (barW >= textW + 2 * pad) {
             return new LabelPlacement(barX + pad, textW, true);
         }
-        if (barX + barW + pad + textW <= trackW) {
+        if (barX + barW + pad + textW <= freeTo) {
             return new LabelPlacement(barX + barW + pad, textW, false);
         }
-        if (barX - pad - textW >= 0) {
+        if (barX - pad - textW >= freeFrom) {
             return new LabelPlacement(barX - pad - textW, textW, false);
         }
         // no room on either side: keep the bar's own (readable) style and let the text be cut

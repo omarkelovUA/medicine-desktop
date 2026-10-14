@@ -19,6 +19,7 @@ import javafx.scene.shape.Rectangle;
 import javafx.scene.text.TextAlignment;
 import ua.medicine.Settings;
 import ua.medicine.domain.Medicine;
+import ua.medicine.domain.Period;
 import ua.medicine.domain.Person;
 import ua.medicine.i18n.Messages;
 import ua.medicine.schedule.TimeScale;
@@ -231,10 +232,23 @@ final class TimelineView extends VBox {
 
         var track = gridTrack();
         addToday(track); // behind the bar and its label
-        LocalDate endExclusive = m.endDate().map(end -> end.plusDays(1)).orElse(null);
-        boolean cutLeft = m.firstStart().isBefore(scale.start());
+        List<Period> periods = TimelineRows.visiblePeriods(m, scale);
+        for (int i = 0; i < periods.size(); i++) {
+            // a label outside its bar must not run into the neighbouring bars
+            double freeFrom = i == 0 ? 0 : scale.fraction(periods.get(i - 1).endDate().orElseThrow().plusDays(1));
+            double freeTo = i == periods.size() - 1 ? 1 : scale.fraction(periods.get(i + 1).start());
+            addBar(track, m, periods.get(i), freeFrom, freeTo);
+        }
+        var row = row(nameCell, track, ROW_HEIGHT);
+        row.getStyleClass().add("timeline-row");
+        return row;
+    }
+
+    private void addBar(Track track, Medicine m, Period period, double freeFrom, double freeTo) {
+        LocalDate endExclusive = period.endDate().map(end -> end.plusDays(1)).orElse(null);
+        boolean cutLeft = period.start().isBefore(scale.start());
         boolean cutRight = endExclusive == null || endExclusive.isAfter(scale.endExclusive());
-        double from = scale.fraction(m.firstStart());
+        double from = scale.fraction(period.start());
         double to = endExclusive == null ? 1 : scale.fraction(endExclusive);
 
         var bar = new Region();
@@ -244,16 +258,13 @@ final class TimelineView extends VBox {
         boolean arrow = endExclusive == null && cutRight;
         var label = new Label(TimeLabels.barLabel(m) + (arrow ? " →" : ""));
         label.getStyleClass().add("timeline-bar-label");
-        var tip = TimeLabels.tooltip(m);
+        var tip = TimeLabels.tooltip(m, period);
         for (Node n : List.of(bar, label)) {
             Tooltip.install(n, new Tooltip(tip));
             n.setOnMouseClicked(e -> onOpen.accept(m));
         }
         track.place(bar, from, to, Kind.BAR);
-        track.place(label, from, to, Kind.LABEL);
-        var row = row(nameCell, track, ROW_HEIGHT);
-        row.getStyleClass().add("timeline-row");
-        return row;
+        track.placeLabel(label, from, to, freeFrom, freeTo);
     }
 
     /** A track with the column lines (and weekend shading in days zoom). */
@@ -295,7 +306,8 @@ final class TimelineView extends VBox {
 
     private enum Kind { FILL, LINE, BAR, LABEL }
 
-    private record Span(double from, double to, Kind kind) {
+    /** {@code freeFrom}/{@code freeTo}: for labels, the part of the track not taken by the row's other bars. */
+    private record Span(double from, double to, Kind kind, double freeFrom, double freeTo) {
     }
 
     /** Lays children out by their date fractions across its width, so it follows window resizes. */
@@ -315,8 +327,13 @@ final class TimelineView extends VBox {
         }
 
         void place(Node node, double from, double to, Kind kind) {
-            node.getProperties().put(SPAN, new Span(from, to, kind));
+            node.getProperties().put(SPAN, new Span(from, to, kind, 0, 1));
             getChildren().add(node);
+        }
+
+        void placeLabel(Label label, double from, double to, double freeFrom, double freeTo) {
+            label.getProperties().put(SPAN, new Span(from, to, Kind.LABEL, freeFrom, freeTo));
+            getChildren().add(label);
         }
 
         @Override
@@ -338,14 +355,16 @@ final class TimelineView extends VBox {
                     case FILL -> n.resizeRelocate(x, 0, width, h);
                     case LINE -> n.resizeRelocate(x - 1, 0, 2, h);
                     case BAR -> n.resizeRelocate(x, BAR_INSET, Math.max(MIN_BAR, width), h - 2 * BAR_INSET);
-                    case LABEL -> layoutLabel((Label) n, x, Math.max(MIN_BAR, width), w, h);
+                    case LABEL -> layoutLabel((Label) n, x, Math.max(MIN_BAR, width), s, w, h);
                 }
             }
         }
 
-        private void layoutLabel(Label label, double barX, double barW, double w, double h) {
+        private void layoutLabel(Label label, double barX, double barW, Span s, double w, double h) {
             double textH = label.prefHeight(-1);
-            var p = LabelPlacement.of(barX, barW, label.prefWidth(-1), w, LABEL_PAD);
+            double freeFrom = s.freeFrom() > 0 ? s.freeFrom() * w + LABEL_PAD : 0;
+            double freeTo = s.freeTo() < 1 ? s.freeTo() * w - LABEL_PAD : w;
+            var p = LabelPlacement.of(barX, barW, label.prefWidth(-1), freeFrom, freeTo, LABEL_PAD);
             label.pseudoClassStateChanged(OUTSIDE, !p.inside());
             label.resizeRelocate(p.x(), (h - textH) / 2, p.width(), textH);
         }

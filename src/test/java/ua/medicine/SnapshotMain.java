@@ -11,6 +11,7 @@ import javafx.stage.Window;
 import javafx.util.Duration;
 import ua.medicine.domain.Course;
 import ua.medicine.domain.Medicine;
+import ua.medicine.domain.Period;
 import ua.medicine.domain.PeriodUnit;
 import ua.medicine.domain.Schedule;
 
@@ -66,6 +67,16 @@ public final class SnapshotMain {
             ctx.medicineService().create(new Medicine(null, m.id(), "Магній B6", "1 таблетка", "#2f7d5b",
                     today.minusDays(20), new Course.Fixed(3, PeriodUnit.MONTHS),
                     new Schedule.Weekly(Set.of(DayOfWeek.MONDAY, DayOfWeek.THURSDAY), List.of(t.apply("09:00"))), true));
+            // taken again after a rest: two periods on one line
+            ctx.medicineService().create(new Medicine(null, o.id(), "Вітамін A", "1 капсула", "#e08a1e", List.of(
+                    new Period(today.minusDays(200), new Course.Fixed(30, PeriodUnit.DAYS)),
+                    new Period(today.minusDays(20), new Course.Fixed(2, PeriodUnit.MONTHS))),
+                    new Schedule.Daily(List.of(t.apply("09:00"))), true));
+            // in a rest now, next period planned
+            ctx.medicineService().create(new Medicine(null, m.id(), "Залізо", "1 таблетка", "#c0392b", List.of(
+                    new Period(today.minusDays(60), new Course.Fixed(10, PeriodUnit.DAYS)),
+                    new Period(today.plusDays(10), new Course.Fixed(10, PeriodUnit.DAYS))),
+                    new Schedule.Daily(List.of(t.apply("13:00"))), true));
             var first = ctx.doseRepository().findByMedicineBetween(amox.id(), today.atStartOfDay(),
                     today.plusDays(1).atStartOfDay()).getFirst();
             ctx.doseService().markTaken(first.id());

@@ -3,6 +3,7 @@ package ua.medicine.ui;
 import org.junit.jupiter.api.Test;
 import ua.medicine.domain.Course;
 import ua.medicine.domain.Medicine;
+import ua.medicine.domain.Period;
 import ua.medicine.domain.PeriodUnit;
 import ua.medicine.domain.Schedule;
 import ua.medicine.schedule.TimeScale;
@@ -88,13 +89,17 @@ class TimeLabelsTest {
                 .isEqualTo("Амоксицилін");
     }
 
+    private static String tooltip(Medicine m) {
+        return TimeLabels.tooltip(m, m.lastPeriod());
+    }
+
     @Test
     void tooltips() {
-        assertThat(TimeLabels.tooltip(medicine("Амоксицилін", "500 мг", new Course.Fixed(10, PeriodUnit.DAYS))))
+        assertThat(tooltip(medicine("Амоксицилін", "500 мг", new Course.Fixed(10, PeriodUnit.DAYS))))
                 .isEqualTo("Амоксицилін — 500 мг\n13.10.2026 – 22.10.2026");
-        assertThat(TimeLabels.tooltip(medicine("Вітамін D", "2000 МО", new Course.Ongoing())))
+        assertThat(tooltip(medicine("Вітамін D", "2000 МО", new Course.Ongoing())))
                 .isEqualTo("Вітамін D — 2000 МО\nз 13.10.2026 · Постійно");
-        assertThat(TimeLabels.tooltip(medicine("Амоксицилін", " ", new Course.Ongoing())))
+        assertThat(tooltip(medicine("Амоксицилін", " ", new Course.Ongoing())))
                 .startsWith("Амоксицилін\n");
     }
 
@@ -104,5 +109,14 @@ class TimeLabelsTest {
                 .isEqualTo("28.09");
         assertThat(TimeLabels.columnCompact(Zoom.MONTHS, col(LocalDate.of(2026, 10, 1), LocalDate.of(2026, 11, 1))))
                 .isEqualTo("жовт");
+    }
+
+    @Test
+    void tooltipPerPeriod() {
+        var m = medicine("Вітамін A", "1 капсула", new Course.Fixed(10, PeriodUnit.DAYS)).withPeriods(List.of(
+                new Period(ANCHOR, new Course.Fixed(10, PeriodUnit.DAYS)),
+                new Period(ANCHOR.plusMonths(2), new Course.Ongoing())));
+        assertThat(TimeLabels.tooltip(m, m.periods().getFirst())).isEqualTo("Вітамін A — 1 капсула\n13.10.2026 – 22.10.2026");
+        assertThat(TimeLabels.tooltip(m, m.lastPeriod())).isEqualTo("Вітамін A — 1 капсула\nз 13.12.2026 · Постійно");
     }
 }

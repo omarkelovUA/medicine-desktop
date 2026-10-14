@@ -3,6 +3,7 @@ package ua.medicine.ui;
 import org.junit.jupiter.api.Test;
 import ua.medicine.domain.Course;
 import ua.medicine.domain.Medicine;
+import ua.medicine.domain.Period;
 import ua.medicine.domain.PeriodUnit;
 import ua.medicine.domain.Person;
 import ua.medicine.domain.Schedule;
@@ -89,5 +90,31 @@ class TimelineRowsTest {
         var c1 = med(3, "C1", LocalDate.of(2026, 10, 1), days(3));
         assertThat(names(TimelineRows.build(List.of(A, C), List.of(a1, c1), false, OCTOBER)))
                 .containsExactly("C1", "A1");
+    }
+
+    private static Medicine medPeriods(String name, Period... periods) {
+        return med(1, name, periods[0].start(), periods[0].course()).withPeriods(List.of(periods));
+    }
+
+    @Test
+    void visiblePeriodsClipsToRange() {
+        var m = medPeriods("x", new Period(LocalDate.of(2026, 9, 1), days(10)),
+                new Period(LocalDate.of(2026, 10, 5), days(3)), new Period(LocalDate.of(2026, 10, 20), days(30)));
+        assertThat(TimelineRows.visiblePeriods(m, OCTOBER)).containsExactly(m.periods().get(1), m.periods().get(2));
+    }
+
+    @Test
+    void periodsOnlyAroundRangeHidden() {
+        var m = medPeriods("x", new Period(LocalDate.of(2026, 9, 1), days(10)),
+                new Period(LocalDate.of(2026, 12, 1), days(5)));
+        assertThat(TimelineRows.build(List.of(A), List.of(m), false, OCTOBER)).isEmpty();
+    }
+
+    @Test
+    void orderByFirstVisibleStart() {
+        var a = medPeriods("A", new Period(LocalDate.of(2026, 1, 1), days(10)),
+                new Period(LocalDate.of(2026, 10, 20), days(5)));
+        var b = medPeriods("B", new Period(LocalDate.of(2026, 10, 10), days(5)));
+        assertThat(names(TimelineRows.build(List.of(A), List.of(a, b), false, OCTOBER))).containsExactly("B", "A");
     }
 }

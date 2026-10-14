@@ -33,4 +33,14 @@ class LabelPlacementTest {
     void neverNegativeWidthOnATinyBar() {
         assertThat(LabelPlacement.of(10, 4, 200, 100, PAD).width()).isZero();
     }
+
+    @Test
+    void notRightWhenTheNextBarIsInTheWay() { // free space on this row ends at 150, where the next bar starts
+        assertThat(LabelPlacement.of(100, 20, 80, 0, 150, PAD)).isEqualTo(new LabelPlacement(14, 80, false));
+    }
+
+    @Test
+    void notLeftWhenThePreviousBarIsInTheWay() { // previous bar ends at 50; right side blocked at 150
+        assertThat(LabelPlacement.of(100, 20, 80, 50, 150, PAD)).isEqualTo(new LabelPlacement(106, 8, true));
+    }
 }

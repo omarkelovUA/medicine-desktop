@@ -1,6 +1,7 @@
 package ua.medicine.ui;
 
 import ua.medicine.domain.Medicine;
+import ua.medicine.domain.Period;
 import ua.medicine.i18n.Formats;
 import ua.medicine.i18n.Messages;
 import ua.medicine.schedule.TimeScale;
@@ -66,10 +67,10 @@ final class TimeLabels {
         return m.dosage() == null || m.dosage().isBlank() ? m.name() : m.name() + " · " + m.dosage().trim();
     }
 
-    static String tooltip(Medicine m) {
+    static String tooltip(Medicine m, Period period) {
         String title = m.dosage() == null || m.dosage().isBlank() ? m.name() : m.name() + " — " + m.dosage().trim();
-        String start = Formats.date(m.firstStart());
-        return m.endDate()
+        String start = Formats.date(period.start());
+        return period.endDate()
                 .map(end -> Messages.get("timeline.tooltip.fixed", title, start, Formats.date(end)))
                 .orElseGet(() -> Messages.get("timeline.tooltip.ongoing", title, start));
     }
