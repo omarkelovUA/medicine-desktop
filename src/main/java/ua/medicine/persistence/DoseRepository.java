@@ -104,6 +104,15 @@ public final class DoseRepository {
                 ORDER BY d.scheduled_at""", personId, text(pushFrom));
     }
 
+    /** Visible doses of the person that have a calendar event, scheduled in [from, toExclusive). */
+    public List<DoseOccurrence> findWithEventForPerson(long personId, LocalDateTime from, LocalDateTime toExclusive) {
+        return query("""
+                SELECT d.* FROM dose d JOIN medicine m ON m.id = d.medicine_id
+                WHERE m.person_id=? AND d.calendar_event_id IS NOT NULL AND d.scheduled_at>=? AND d.scheduled_at<?
+                  AND d.sync_state <> 'DELETE_PENDING'
+                ORDER BY d.scheduled_at""", personId, text(from), text(toExclusive));
+    }
+
     public void markDirtyForPerson(long personId) {
         execute("""
                 UPDATE dose SET sync_state='DIRTY'
@@ -133,6 +142,25 @@ public final class DoseRepository {
         });
     }
 
+    // Writes for marks pulled from the phone: each applies only to a CLEAN dose, so a change made in the app
+    // while the pull was running wins. They return whether the dose changed.
+
+    public boolean markTakenFromPhone(long id, LocalDateTime at) {
+        return execute("""
+                UPDATE dose SET taken_at=?, missed=0, sync_state='DIRTY'
+                WHERE id=? AND taken_at IS NULL AND sync_state='CLEAN'""", text(at), id) > 0;
+    }
+
+    public boolean unmarkTakenFromPhone(long id, boolean missed) {
+        return execute("""
+                UPDATE dose SET taken_at=NULL, missed=?, sync_state='DIRTY'
+                WHERE id=? AND taken_at IS NOT NULL AND sync_state='CLEAN'""", missed ? 1 : 0, id) > 0;
+    }
+
+    public boolean markDirtyIfClean(long id) {
+        return execute("UPDATE dose SET sync_state='DIRTY' WHERE id=? AND sync_state='CLEAN'", id) > 0;
+    }
+
     public void setSyncState(long id, SyncState state) {
         execute("UPDATE dose SET sync_state=? WHERE id=?", state.name(), id);
     }
@@ -152,10 +180,10 @@ public final class DoseRepository {
         execute("DELETE FROM dose WHERE id=?", id);
     }
 
-    private void execute(String sql, Object... args) {
-        db.run(c -> {
+    private int execute(String sql, Object... args) {
+        return db.tx(c -> {
             try (var st = prepare(c, sql, args)) {
-                st.executeUpdate();
+                return st.executeUpdate();
             }
         });
     }
