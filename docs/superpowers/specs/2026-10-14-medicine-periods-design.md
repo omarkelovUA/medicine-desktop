@@ -68,12 +68,12 @@ Runs once, in Java, because SQLite's `lower()` does not fold Cyrillic.
 1. Group all medicines (active and deleted) by person and by name stripped and lower-cased (`Locale.ROOT`).
 2. In a group of two or more, the **survivor** is the active medicine with the latest last-period start (ties:
    higher id); if none is active, the one with the latest start. Its name, dosage, colour and schedule are kept.
-3. If any two periods in the group overlap, the group is **not merged** (these were taken at the same time on
-   purpose, e.g. one entry for the morning, another for the evening).
+3. If any two periods in the group overlap, or two medicines in it have a dose at the same date-time, the group is
+   **not merged** (these were taken at the same time on purpose, e.g. one entry for the morning, another for the
+   evening). This also guarantees `UNIQUE (medicine_id, scheduled_at)` cannot conflict.
 4. Otherwise, the other medicines' periods are moved to the survivor, their doses are re-pointed to the survivor
    (`medicine_id`), and the other medicine rows are deleted. Dose rows keep their `calendar_event_id`, so Google
-   Calendar events are not duplicated. Since periods do not overlap, `UNIQUE (medicine_id, scheduled_at)` cannot
-   conflict.
+   Calendar events are not duplicated.
 5. The survivor is active if any medicine in the group was active.
 
 ## Doses
