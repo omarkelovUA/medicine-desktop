@@ -146,12 +146,13 @@ public final class MedicineDialogController {
         if (form != null) {
             name.setText(form.name());
             dosage.setText(form.dosage());
-            start.setValue(form.start());
-            (form.ongoing() ? ongoing : fixed).setSelected(true);
-            if (form.amount() != null) {
-                amount.getValueFactory().setValue(form.amount());
+            MedicineForm.PeriodRow row = form.periods().getLast();
+            start.setValue(row.start());
+            (row.ongoing() ? ongoing : fixed).setSelected(true);
+            if (row.amount() != null) {
+                amount.getValueFactory().setValue(row.amount());
             }
-            unit.setValue(form.unit());
+            unit.setValue(row.unit());
             switch (form.frequency()) {
                 case MedicineForm.WEEKLY -> weekly.setSelected(true);
                 case MedicineForm.MONTHLY -> monthly.setSelected(true);
@@ -259,8 +260,9 @@ public final class MedicineDialogController {
                 : monthly.isSelected() ? MedicineForm.MONTHLY : MedicineForm.DAILY;
         Person p = person.getValue();
         return new MedicineForm(p == null ? null : p.id(), name.getText(), dosage.getText(), color.selected(),
-                start.getValue() != null ? start.getValue() : LocalDate.now(ctx.clock()), ongoing.isSelected(),
-                amount.getValue(), unit.getValue(), frequency, days, dayOfMonth.getValue(), List.copyOf(times));
+                List.of(new MedicineForm.PeriodRow(start.getValue() != null ? start.getValue() : LocalDate.now(ctx.clock()),
+                        ongoing.isSelected(), amount.getValue(), unit.getValue())),
+                frequency, days, dayOfMonth.getValue(), List.copyOf(times));
     }
 
     private Node content() {
