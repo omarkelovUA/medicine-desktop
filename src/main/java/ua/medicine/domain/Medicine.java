@@ -55,6 +55,11 @@ public record Medicine(Long id, long personId, String name, String dosage, Strin
         return periods.stream().filter(p -> p.contains(date)).findFirst();
     }
 
+    /** Between two periods: an earlier one has ended and a later one has not started yet. */
+    public boolean isResting(LocalDate today) {
+        return periodAt(today).isEmpty() && firstStart().isBefore(today) && lastPeriod().start().isAfter(today);
+    }
+
     /** The period containing today, else the next one to start, else the last one. */
     public Period relevantPeriod(LocalDate today) {
         return periodAt(today)

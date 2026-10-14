@@ -23,6 +23,7 @@ import ua.medicine.service.DoseView;
 import java.time.LocalDate;
 import java.time.format.TextStyle;
 import java.util.List;
+import java.util.Optional;
 import java.util.function.BiConsumer;
 
 /** Dashboard card: medicine info, course progress and the current period's dose checkboxes. */
@@ -57,15 +58,17 @@ public final class MedicineCard extends VBox {
         detailsLabel.getStyleClass().add("muted");
         detailsLabel.setWrapText(true);
 
-        var progress = CourseProgress.of(medicine.relevantPeriod(today), today);
+        boolean resting = medicine.isResting(today);
+        var progress = resting ? Optional.<CourseProgress>empty() : CourseProgress.of(medicine.relevantPeriod(today), today);
         var bar = new ProgressBar(progress.map(CourseProgress::fraction).orElse(0.0));
         bar.setMaxWidth(Double.MAX_VALUE);
         bar.getStyleClass().add("course-progress");
         bar.setVisible(progress.isPresent());
         bar.setManaged(progress.isPresent());
-        var progressText = new Label(progress
+        String start = Formats.dayMonth(medicine.relevantPeriod(today).start());
+        var progressText = new Label(resting ? Messages.get("card.nextPeriod", start) : progress
                 .map(p -> Formats.progress(p) + " · " + Messages.get("card.until", Formats.dayMonth(p.endDate())))
-                .orElseGet(() -> Messages.get("card.ongoing", Formats.dayMonth(medicine.relevantPeriod(today).start()))));
+                .orElseGet(() -> Messages.get("card.ongoing", start)));
         progressText.getStyleClass().add("muted");
 
         var chips = new FlowPane(6, 6);

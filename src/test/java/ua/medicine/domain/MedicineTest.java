@@ -77,4 +77,13 @@ class MedicineTest {
         assertThat(m.firstStart()).isEqualTo(d("2026-01-01"));
         assertThat(m.lastPeriod()).isEqualTo(P2);
     }
+
+    @Test
+    void isRestingOnlyBetweenPeriods() {
+        var m = med(List.of(P1, P2));
+        assertThat(m.isResting(d("2026-05-01"))).isTrue();
+        assertThat(m.isResting(d("2026-01-10"))).isFalse(); // in a period
+        assertThat(m.isResting(d("2025-12-01"))).isFalse(); // not started yet
+        assertThat(m.isResting(d("2026-12-01"))).isFalse(); // finished
+    }
 }
