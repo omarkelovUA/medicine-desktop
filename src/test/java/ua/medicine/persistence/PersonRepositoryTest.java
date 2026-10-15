@@ -23,6 +23,17 @@ class PersonRepositoryTest {
     }
 
     @Test
+    void hostFieldsRoundTripAndFindHostedBy() {
+        var parent = repo.save(new Person(null, "Олена", "#3a7bd5", "o@gmail.com", "calO"));
+        var child = repo.save(new Person(null, "Софія", "#e08a1e", null, null)
+                .withHostedGoogle("o@gmail.com", "cal-Ліки Софія", parent.id(), "Ліки Софія"));
+        assertThat(repo.findById(child.id())).contains(child);
+        assertThat(repo.findById(parent.id()).orElseThrow().calendarHostId()).isNull();
+        assertThat(repo.findHostedBy(parent.id())).containsExactly(child);
+        assertThat(repo.findHostedBy(child.id())).isEmpty();
+    }
+
+    @Test
     void nameUnique() {
         repo.save(new Person(null, "Софія", "#e08a1e", null, null));
         assertThatThrownBy(() -> repo.save(new Person(null, "Софія", "#000", null, null)))
