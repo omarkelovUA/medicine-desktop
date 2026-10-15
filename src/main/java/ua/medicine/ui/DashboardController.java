@@ -3,9 +3,12 @@ package ua.medicine.ui;
 import javafx.application.Platform;
 import javafx.fxml.FXML;
 import javafx.geometry.Pos;
+import javafx.geometry.Side;
 import javafx.scene.control.Button;
 import javafx.scene.control.CheckBox;
+import javafx.scene.control.ContextMenu;
 import javafx.scene.control.Label;
+import javafx.scene.control.MenuItem;
 import javafx.scene.control.MenuButton;
 import javafx.scene.control.RadioMenuItem;
 import javafx.scene.control.ScrollPane;
@@ -215,6 +218,10 @@ public final class DashboardController {
         selected.ifPresent(p -> {
             if (p.googleLinked() && authFailedPersonIds.contains(p.id())) {
                 googleButton.setText(Messages.get("google.reconnect"));
+            } else if (p.googleLinked() && p.hosted()) {
+                String host = persons.stream().filter(h -> h.id() == p.tokenOwnerId()).map(Person::name)
+                        .findFirst().orElse(p.googleEmail());
+                googleButton.setText(Messages.get("google.connectedThrough", host));
             } else if (p.googleLinked()) {
                 googleButton.setText(Messages.get("google.connected", p.googleEmail()));
             } else {
@@ -327,32 +334,76 @@ public final class DashboardController {
         }
         Person p = selected.get();
         if (p.googleLinked() && !authFailedPersonIds.contains(p.id())) {
-            if (Dialogs.confirm(window(), Messages.get("confirm.disconnect", p.name()))) {
-                try {
-                    ctx.googleLink().unlink(p.id());
-                } catch (RuntimeException e) {
-                    Dialogs.dbError(window(), e);
-                }
-                refresh();
-            }
+            disconnect(p);
             return;
         }
+        if (p.googleLinked()) {
+            signIn(p.tokenOwnerId()); // a child's token is the parent's
+            return;
+        }
+        List<Person> hosts = ctx.googleLink().possibleHosts(p.id());
+        if (hosts.isEmpty()) {
+            signIn(p.id());
+            return;
+        }
+        var own = new MenuItem(Messages.get("google.ownAccount"));
+        own.setOnAction(e -> signIn(p.id()));
+        var menu = new ContextMenu(own);
+        for (Person host : hosts) {
+            var item = new MenuItem(Messages.get("google.throughHost", host.name(), host.googleEmail()));
+            item.setOnAction(e -> linkThroughHost(p, host));
+            menu.getItems().add(item);
+        }
+        menu.show(googleButton, Side.BOTTOM, 0, 0);
+    }
+
+    private void disconnect(Person p) {
+        String question = Messages.get("confirm.disconnect", p.name());
+        if (!p.hosted()) {
+            List<Person> children = ctx.googleLink().hostedBy(p.id());
+            if (!children.isEmpty()) {
+                question += "\n" + Messages.get("google.disconnectAlso",
+                        children.stream().map(Person::name).collect(Collectors.joining(", ")));
+            }
+        }
+        if (Dialogs.confirm(window(), question)) {
+            try {
+                ctx.googleLink().unlink(p.id());
+            } catch (RuntimeException e) {
+                Dialogs.dbError(window(), e);
+            }
+            refresh();
+        }
+    }
+
+    /** Browser sign-in for the person's own account; on success clears the warning of everyone reached with it. */
+    private void signIn(long personId) {
         if (!ctx.googleAuth().clientSecretPresent() && !GoogleSetupDialog.show(window(), ctx)) {
             return; // no OAuth client yet: the setup dialog explains how to get one
         }
+        ctx.googleAuth().cancelPendingAuthorization(); // a previous, abandoned sign-in
+        inBackground(personId, () -> {
+            ctx.googleLink().link(personId);
+            Set<Long> sameToken = ctx.personService().all().stream()
+                    .filter(q -> q.tokenOwnerId() == personId).map(Person::id).collect(Collectors.toSet());
+            Platform.runLater(() -> authFailedPersonIds.removeAll(sameToken));
+        });
+    }
+
+    private void linkThroughHost(Person child, Person host) {
+        inBackground(child.id(), () -> ctx.googleLink().linkThroughHost(child.id(), host.id()));
+    }
+
+    private void inBackground(long personId, Runnable linking) {
         googleButton.setDisable(true);
         googleButton.setText("…");
-        ctx.googleAuth().cancelPendingAuthorization(); // a previous, abandoned sign-in
         ctx.io().submit(() -> {
             try {
-                ctx.googleLink().link(p.id());
-                Platform.runLater(() -> {
-                    authFailedPersonIds.remove(p.id());
-                    refresh();
-                });
+                linking.run();
+                Platform.runLater(this::refresh);
             } catch (RuntimeException e) {
                 Platform.runLater(() -> {
-                    log.warn("Linking Google for person {} failed", p.id(), e);
+                    log.warn("Linking Google for person {} failed", personId, e);
                     Dialogs.error(window(), Messages.get("google.linkFailed"));
                     refresh();
                 });

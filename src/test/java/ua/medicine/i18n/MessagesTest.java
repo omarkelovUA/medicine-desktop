@@ -22,4 +22,10 @@ class MessagesTest {
     void plainValueWithoutArgs() {
         assertThat(Messages.get("tab.all")).isEqualTo("Усі");
     }
+
+    @Test
+    void childCalendarTexts() {
+        assertThat(Messages.get("google.throughHost", "Олена", "o@g")).isEqualTo("Через календар Олена (o@g)");
+        assertThat(Messages.get("google.connectedThrough", "Олена")).isEqualTo("G ✓ через Олена");
+    }
 }
