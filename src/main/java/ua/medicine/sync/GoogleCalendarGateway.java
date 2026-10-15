@@ -57,6 +57,13 @@ public final class GoogleCalendarGateway implements CalendarGateway {
     }
 
     @Override
+    public void renameCalendar(String calendarId, String name) {
+        call(null, calendarId, () -> client.calendars()
+                .patch(calendarId, new com.google.api.services.calendar.model.Calendar().setSummary(name))
+                .execute());
+    }
+
+    @Override
     public String insertEvent(String calendarId, CalendarEvent event) {
         return call(null, calendarId, () -> client.events().insert(calendarId, toEvent(event)).execute().getId());
     }

@@ -45,8 +45,10 @@ class CalendarSyncServiceTest {
     private final MedicineService medicines = new MedicineService(medicineRepo, doseRepo, clock, SyncTrigger.NOOP);
     private final DoseService doseService = new DoseService(doseRepo, medicineRepo, clock, SyncTrigger.NOOP);
     private final Map<Long, FakeCalendarGateway> gateways = new HashMap<>();
+    private final Map<Long, Integer> gatewayRequests = new HashMap<>();
     private final CalendarGatewayFactory factory = p -> {
-        var g = gateways.get(p.id());
+        gatewayRequests.merge(p.tokenOwnerId(), 1, Integer::sum);
+        var g = gateways.get(p.tokenOwnerId());
         if (g == null) {
             throw new AuthRequiredException("no token");
         }
@@ -346,5 +348,123 @@ class CalendarSyncServiceTest {
         assertThat(r.failed()).isEqualTo(1);
         assertThat(r.lastError()).isNotBlank();
         assertThat(doseRepo.findById(morning.id()).orElseThrow().takenAt()).isNull();
+    }
+
+    private Person child(String name, Person host) {
+        return personRepo.save(new Person(null, name, "#e08a1e", null, null)
+                .withHostedGoogle(host.googleEmail(), "cal-Ліки " + name, host.id(), "Ліки " + name));
+    }
+
+    private Medicine eveningMedicine(Person p) {
+        return medicines.create(med(p.id(), d("2026-10-13"), new Course.Fixed(1, DAYS),
+                new Schedule.Daily(List.of(t("20:00")))));
+    }
+
+    @Test
+    void childDosesGoToChildCalendarThroughParentGateway() {
+        var sofia = child("Софія", oleksandr);
+        var vit = eveningMedicine(sofia);
+
+        sync.syncNow();
+
+        var dose = doses(vit).getFirst();
+        assertThat(dose.syncState()).isEqualTo(CLEAN);
+        assertThat(fake.eventCalendar.get(dose.calendarEventId())).isEqualTo("cal-Ліки Софія");
+        assertThat(fake.events).hasSize(3);
+        assertThat(gatewayRequests.get(oleksandr.id())).isEqualTo(1);
+    }
+
+    @Test
+    void phoneMarkOnChildEventIsPulled() {
+        var sofia = child("Софія", oleksandr);
+        var vit = eveningMedicine(sofia);
+        sync.syncNow();
+        var dose = doses(vit).getFirst();
+        fake.phoneEdit(dose.calendarEventId(), "10", at("2026-10-13T11:30"));
+
+        var r = sync.syncNow();
+
+        assertThat(r.pulled()).isEqualTo(1);
+        assertThat(doseRepo.findById(dose.id()).orElseThrow().takenAt()).isEqualTo(dt("2026-10-13T11:30"));
+    }
+
+    @Test
+    void parentAuthFailureMarksChildrenToo() {
+        var sofia = child("Софія", oleksandr);
+        fake.failAuth = true;
+        assertThat(sync.syncNow().authFailedPersonIds()).contains(oleksandr.id(), sofia.id());
+    }
+
+    @Test
+    void childBeforeParentInListStillSyncsAndSharesAuthFailure() {
+        var placeholder = new Person(null, "Іван", "#222222", "i@gmail.com", "calI");
+        // the child is saved first, so it has the smaller id and is synced before its parent
+        var sofia = personRepo.save(new Person(null, "Софія", "#e08a1e", null, null));
+        var ivan = personRepo.save(placeholder);
+        sofia = personRepo.save(sofia.withHostedGoogle("i@gmail.com", "cal-Ліки Софія", ivan.id(), "Ліки Софія"));
+        var ivanGateway = new FakeCalendarGateway();
+        gateways.put(ivan.id(), ivanGateway);
+        var vit = eveningMedicine(sofia);
+        eveningMedicine(ivan);
+
+        sync.syncNow();
+
+        assertThat(ivanGateway.events).hasSize(2);
+        assertThat(doses(vit).getFirst().syncState()).isEqualTo(CLEAN);
+        assertThat(gatewayRequests.get(ivan.id())).isEqualTo(1);
+
+        ivanGateway.failAuth = true;
+        assertThat(sync.syncNow().authFailedPersonIds()).contains(sofia.id(), ivan.id());
+    }
+
+    @Test
+    void deletedChildCalendarIsRecreatedWithChildNameAndKeepsHost() {
+        var sofia = child("Софія", oleksandr);
+        var vit = eveningMedicine(sofia);
+        sync.syncNow();
+        // only the child's calendar is gone: the fake's flag is per account, so take the parent out of the sync
+        personRepo.save(oleksandr.withGoogle(null, null));
+        fake.calendarDeleted = true;
+        fake.events.clear();
+
+        sync.syncNow();
+
+        var after = personRepo.findById(sofia.id()).orElseThrow();
+        assertThat(after.googleCalendarId()).isEqualTo("cal-Ліки Софія");
+        assertThat(after.hosted()).isTrue();
+        assertThat(after.calendarName()).isEqualTo("Ліки Софія");
+        assertThat(doses(vit).getFirst().syncState()).isEqualTo(CLEAN);
+        assertThat(fake.eventCalendar.get(doses(vit).getFirst().calendarEventId())).isEqualTo("cal-Ліки Софія");
+    }
+
+    @Test
+    void renamedChildCalendarIsRenamedOnce() {
+        var sofia = child("Софія", oleksandr);
+        personRepo.save(sofia.withNameAndColor("Соня", sofia.color()));
+
+        sync.syncNow();
+        sync.syncNow();
+
+        assertThat(fake.renamed).containsEntry("cal-Ліки Софія", "Ліки Соня");
+        assertThat(fake.renames).isEqualTo(1);
+        assertThat(personRepo.findById(sofia.id()).orElseThrow().calendarName()).isEqualTo("Ліки Соня");
+    }
+
+    @Test
+    void renameFailureIsRetriedNextSync() {
+        var sofia = child("Софія", oleksandr);
+        var vit = eveningMedicine(sofia);
+        personRepo.save(personRepo.findById(sofia.id()).orElseThrow().withNameAndColor("Соня", sofia.color()));
+        fake.failRename = true;
+
+        var r = sync.syncNow();
+
+        assertThat(r.failed()).isPositive();
+        assertThat(personRepo.findById(sofia.id()).orElseThrow().calendarName()).isEqualTo("Ліки Софія");
+        assertThat(doses(vit).getFirst().syncState()).isEqualTo(CLEAN);
+
+        fake.failRename = false;
+        sync.syncNow();
+        assertThat(personRepo.findById(sofia.id()).orElseThrow().calendarName()).isEqualTo("Ліки Соня");
     }
 }

@@ -96,26 +96,33 @@ public final class CalendarSyncService implements SyncTrigger {
 
     public synchronized SyncResult syncNow() {
         var run = new Run();
-        for (Person person : persons.findAll()) {
+        List<Person> all = persons.findAll();
+        for (Person person : all) {
             if (!person.googleLinked()) {
                 doses.findNeedingSync(person.id()).stream()
                         .filter(d -> d.syncState() == SyncState.DELETE_PENDING)
                         .forEach(d -> doses.delete(d.id()));
                 continue;
             }
+            long owner = person.tokenOwnerId();
+            if (run.failedOwners.contains(owner)) {
+                continue;
+            }
             try {
-                CalendarGateway gateway = gateways.forPerson(person);
+                // a parent and their children share one account, so one gateway
+                CalendarGateway gateway = run.gateways.computeIfAbsent(owner, k -> gateways.forPerson(person));
                 try {
-                    syncPerson(run, gateway, person.googleCalendarId(), person.id());
+                    syncPerson(run, gateway, person);
                 } catch (CalendarNotFoundException e) {
                     log.warn("Calendar of person {} was deleted; creating it again", person.id());
-                    String calendarId = gateway.ensureCalendar(GoogleLinkService.CALENDAR_NAME);
-                    persons.save(person.withGoogle(person.googleEmail(), calendarId));
+                    String name = GoogleLinkService.calendarNameFor(person);
+                    Person recreated = persons.save(person.withCalendar(gateway.ensureCalendar(name),
+                            person.hosted() ? name : null));
                     doses.markDirtyForPerson(person.id()); // every event went with the old calendar
-                    syncPerson(run, gateway, calendarId, person.id());
+                    syncPerson(run, gateway, recreated);
                 }
             } catch (AuthRequiredException e) {
-                run.authFailed.add(person.id());
+                run.failedOwners.add(owner);
                 run.lastError = e.getMessage();
                 log.warn("Google authorization needed for person {}: {}", person.id(), e.getMessage());
             } catch (RuntimeException e) {
@@ -124,14 +131,42 @@ public final class CalendarSyncService implements SyncTrigger {
                 log.error("Sync for person {} failed", person.id(), e);
             }
         }
-        return new SyncResult(run.pushed, run.pulled, run.deleted, run.failed, run.authFailed, run.lastError);
+        // a lapsed token fails everyone reached with it, whichever of them was synced first
+        Set<Long> authFailed = all.stream()
+                .filter(p -> p.googleLinked() && run.failedOwners.contains(p.tokenOwnerId()))
+                .map(Person::id)
+                .collect(Collectors.toCollection(LinkedHashSet::new));
+        return new SyncResult(run.pushed, run.pulled, run.deleted, run.failed, authFailed, run.lastError);
     }
 
     /** @throws CalendarNotFoundException if the person's calendar is gone */
-    private void syncPerson(Run run, CalendarGateway gateway, String calendarId, long personId) {
+    private void syncPerson(Run run, CalendarGateway gateway, Person person) {
+        String calendarId = person.googleCalendarId();
+        long personId = person.id();
+        renameIfNeeded(run, gateway, person);
         pushChanges(run, gateway, calendarId, personId);
         if (pull(run, gateway, calendarId, personId)) {
             pushChanges(run, gateway, calendarId, personId); // the changed events take the app's form
+        }
+    }
+
+    /**
+     * A child's calendar follows the child's name. Offline, the rename waits for the next sync.
+     *
+     * @throws CalendarNotFoundException if the person's calendar is gone
+     */
+    private void renameIfNeeded(Run run, CalendarGateway gateway, Person person) {
+        String name = GoogleLinkService.calendarNameFor(person);
+        if (!person.hosted() || name.equals(person.calendarName())) {
+            return;
+        }
+        try {
+            gateway.renameCalendar(person.googleCalendarId(), name);
+            persons.save(person.withCalendar(person.googleCalendarId(), name));
+        } catch (UncheckedIOException e) {
+            run.failed++;
+            run.lastError = e.getMessage();
+            log.warn("Renaming the calendar of person {} failed: {}", person.id(), e.getMessage());
         }
     }
 
@@ -256,7 +291,8 @@ public final class CalendarSyncService implements SyncTrigger {
         int deleted;
         int failed;
         String lastError;
-        final Set<Long> authFailed = new LinkedHashSet<>();
+        final Set<Long> failedOwners = new LinkedHashSet<>();
+        final Map<Long, CalendarGateway> gateways = new HashMap<>();
         final Map<Long, Medicine> medicines = new HashMap<>();
     }
 }

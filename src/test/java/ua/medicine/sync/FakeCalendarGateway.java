@@ -15,6 +15,12 @@ class FakeCalendarGateway implements CalendarGateway {
     final Map<String, CalendarEvent> events = new LinkedHashMap<>();
     final Map<String, String> colors = new HashMap<>();
     final Map<String, Instant> updated = new HashMap<>();
+    /** eventId → calendarId */
+    final Map<String, String> eventCalendar = new HashMap<>();
+    /** calendarId → new name */
+    final Map<String, String> renamed = new HashMap<>();
+    int renames;
+    boolean failRename;
     /** The time Google records as "updated" for the app's own inserts and patches. */
     Instant now = Instant.EPOCH;
     boolean failList;
@@ -49,6 +55,7 @@ class FakeCalendarGateway implements CalendarGateway {
         inserts++;
         String id = "ev" + (++nextId);
         store(id, e);
+        eventCalendar.put(id, calendarId);
         return id;
     }
 
@@ -83,9 +90,23 @@ class FakeCalendarGateway implements CalendarGateway {
             throw new CalendarNotFoundException(calendarId);
         }
         return events.entrySet().stream()
+                .filter(e -> calendarId.equals(eventCalendar.get(e.getKey())))
                 .filter(e -> !e.getValue().start().isBefore(from) && e.getValue().start().isBefore(toExclusive))
                 .map(e -> new RemoteEvent(e.getKey(), colors.get(e.getKey()), updated.get(e.getKey())))
                 .toList();
+    }
+
+    @Override
+    public void renameCalendar(String calendarId, String name) {
+        check();
+        if (failRename) {
+            throw new UncheckedIOException(new IOException("offline"));
+        }
+        if (calendarDeleted) {
+            throw new CalendarNotFoundException(calendarId);
+        }
+        renames++;
+        renamed.put(calendarId, name);
     }
 
     /** A colour change made in Google Calendar on the phone. */
