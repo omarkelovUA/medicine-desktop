@@ -23,7 +23,8 @@ class PersonServiceTest {
     private final Database db = TestDb.create();
     private final PersonRepository personRepo = new PersonRepository(db);
     private final MedicineRepository medicineRepo = new MedicineRepository(db);
-    private final PersonService persons = new PersonService(personRepo, medicineRepo);
+    private int syncRequests;
+    private final PersonService persons = new PersonService(personRepo, medicineRepo, () -> syncRequests++);
     private final MedicineService medicines = new MedicineService(medicineRepo, new DoseRepository(db),
             MutableClock.at("2026-10-13T12:00"), SyncTrigger.NOOP);
 
@@ -64,5 +65,12 @@ class PersonServiceTest {
         persons.delete(pid);
         assertThat(persons.all()).isEmpty();
         assertThat(medicineRepo.findAll()).isEmpty();
+    }
+
+    @Test
+    void updateRequestsSyncSoTheCalendarFollowsTheName() {
+        var sofia = persons.create("Софія", "#e08a1e");
+        persons.update(sofia.withNameAndColor("Соня", "#e08a1e"));
+        assertThat(syncRequests).isEqualTo(1);
     }
 }

@@ -33,11 +33,15 @@ class FakeCalendarGateway implements CalendarGateway {
     int calendarsCreated;
     Runnable onInsert = () -> {
     };
+    /** Runs while a rename or a calendar creation is "on the network". */
+    Runnable onCalendarCall = () -> {
+    };
     private int nextId;
 
     @Override
     public String ensureCalendar(String name) {
         check();
+        onCalendarCall.run();
         if (calendarDeleted) {
             calendarDeleted = false;
             calendarsCreated++;
@@ -105,6 +109,7 @@ class FakeCalendarGateway implements CalendarGateway {
         if (calendarDeleted) {
             throw new CalendarNotFoundException(calendarId);
         }
+        onCalendarCall.run();
         renames++;
         renamed.put(calendarId, name);
     }

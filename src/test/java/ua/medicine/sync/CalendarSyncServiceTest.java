@@ -467,4 +467,35 @@ class CalendarSyncServiceTest {
         sync.syncNow();
         assertThat(personRepo.findById(sofia.id()).orElseThrow().calendarName()).isEqualTo("Ліки Соня");
     }
+
+    @Test
+    void unlinkDuringRenameIsNotUndone() {
+        var sofia = child("Софія", oleksandr);
+        personRepo.save(sofia.withNameAndColor("Соня", "#000000"));
+        fake.onCalendarCall = () -> personRepo.save(
+                personRepo.findById(sofia.id()).orElseThrow().withNameAndColor("Соня", "#ffffff").withGoogle(null, null));
+
+        sync.syncNow();
+
+        var after = personRepo.findById(sofia.id()).orElseThrow();
+        assertThat(after.googleLinked()).isFalse();
+        assertThat(after.hosted()).isFalse();
+        assertThat(after.color()).isEqualTo("#ffffff");
+    }
+
+    @Test
+    void unlinkDuringCalendarRecoveryIsNotUndone() {
+        var sofia = child("Софія", oleksandr);
+        eveningMedicine(sofia);
+        sync.syncNow();
+        personRepo.save(oleksandr.withGoogle(null, null));
+        fake.calendarDeleted = true;
+        fake.onCalendarCall = () -> personRepo.save(personRepo.findById(sofia.id()).orElseThrow().withGoogle(null, null));
+
+        sync.syncNow();
+
+        var after = personRepo.findById(sofia.id()).orElseThrow();
+        assertThat(after.googleLinked()).isFalse();
+        assertThat(after.hosted()).isFalse();
+    }
 }

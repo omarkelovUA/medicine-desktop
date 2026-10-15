@@ -53,7 +53,7 @@ public final class AppContext implements AutoCloseable {
         googleAuth = new GoogleAuthService(paths);
         var gatewayFactory = new GoogleCalendarGatewayFactory(googleAuth);
         sync = new CalendarSyncService(personRepository, medicineRepository, doseRepository, gatewayFactory, clock);
-        personService = new PersonService(personRepository, medicineRepository);
+        personService = new PersonService(personRepository, medicineRepository, sync);
         medicineService = new MedicineService(medicineRepository, doseRepository, clock, sync);
         doseService = new DoseService(doseRepository, medicineRepository, clock, sync);
         historyService = new HistoryService(doseRepository, medicineRepository, personRepository, clock);

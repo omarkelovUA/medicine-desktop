@@ -116,10 +116,12 @@ public final class CalendarSyncService implements SyncTrigger {
                 } catch (CalendarNotFoundException e) {
                     log.warn("Calendar of person {} was deleted; creating it again", person.id());
                     String name = GoogleLinkService.calendarNameFor(person);
-                    Person recreated = persons.save(person.withCalendar(gateway.ensureCalendar(name),
-                            person.hosted() ? name : null));
-                    doses.markDirtyForPerson(person.id()); // every event went with the old calendar
-                    syncPerson(run, gateway, recreated);
+                    Person recreated = person.withCalendar(gateway.ensureCalendar(name), person.hosted() ? name : null);
+                    if (persons.updateCalendar(person.id(), person.googleCalendarId(), recreated.googleCalendarId(),
+                            recreated.calendarName())) {
+                        doses.markDirtyForPerson(person.id()); // every event went with the old calendar
+                        syncPerson(run, gateway, recreated);
+                    }
                 }
             } catch (AuthRequiredException e) {
                 run.failedOwners.add(owner);
@@ -162,7 +164,7 @@ public final class CalendarSyncService implements SyncTrigger {
         }
         try {
             gateway.renameCalendar(person.googleCalendarId(), name);
-            persons.save(person.withCalendar(person.googleCalendarId(), name));
+            persons.updateCalendar(person.id(), person.googleCalendarId(), person.googleCalendarId(), name);
         } catch (UncheckedIOException e) {
             run.failed++;
             run.lastError = e.getMessage();

@@ -60,9 +60,17 @@ public final class GoogleLinkService {
         return linked;
     }
 
-    /** As {@link #saveLink}: the doses are pushed again only when the calendar changed. */
+    /**
+     * As {@link #saveLink}: the doses are pushed again only when the calendar changed.
+     *
+     * @throws IllegalArgumentException if the host is not linked with their own account any more
+     */
     Person saveHostedLink(Person child, Person host, String calendarId) {
-        Person linked = persons.save(child.withHostedGoogle(host.googleEmail(), calendarId, host.id(),
+        Person current = find(host.id()); // the host may have been unlinked during the Google call
+        if (!current.googleLinked() || current.hosted()) {
+            throw new IllegalArgumentException("Person " + host.id() + " is no longer linked");
+        }
+        Person linked = persons.save(child.withHostedGoogle(current.googleEmail(), calendarId, current.id(),
                 childCalendarName(child.name())));
         if (!calendarId.equals(child.googleCalendarId())) {
             doses.markDirtyForPerson(child.id());

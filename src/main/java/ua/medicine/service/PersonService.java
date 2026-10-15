@@ -10,10 +10,12 @@ public final class PersonService {
 
     private final PersonRepository persons;
     private final MedicineRepository medicines;
+    private final SyncTrigger syncTrigger;
 
-    public PersonService(PersonRepository persons, MedicineRepository medicines) {
+    public PersonService(PersonRepository persons, MedicineRepository medicines, SyncTrigger syncTrigger) {
         this.persons = persons;
         this.medicines = medicines;
+        this.syncTrigger = syncTrigger;
     }
 
     public List<Person> all() {
@@ -24,8 +26,11 @@ public final class PersonService {
         return persons.save(new Person(null, name, color, null, null));
     }
 
+    /** Requests a sync: a child's calendar in the parent's account follows the child's name. */
     public Person update(Person person) {
-        return persons.save(person);
+        Person saved = persons.save(person);
+        syncTrigger.requestSync();
+        return saved;
     }
 
     /**

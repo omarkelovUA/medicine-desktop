@@ -213,4 +213,15 @@ class GoogleLinkServiceTest {
         assertThat(GoogleLinkService.calendarNameFor(olena)).isEqualTo("Ліки");
         assertThat(GoogleLinkService.calendarNameFor(sofia)).isEqualTo("Ліки Софія");
     }
+
+    @Test
+    void hostUnlinkedWhileLinkingIsRefused() {
+        var olena = parent();
+        var sofia = persons.save(new Person(null, "Софія", "#e08a1e", null, null));
+        persons.save(olena.withGoogle(null, null)); // the parent was disconnected during the Google call
+
+        assertThatThrownBy(() -> linkService().saveHostedLink(sofia, olena, "cal-Ліки Софія"))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThat(persons.findById(sofia.id()).orElseThrow().googleLinked()).isFalse();
+    }
 }

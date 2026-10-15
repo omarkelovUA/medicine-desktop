@@ -44,6 +44,25 @@ public final class PersonRepository {
         });
     }
 
+    /**
+     * Moves the person to another calendar unless their link changed meanwhile (the sync works from an older
+     * read, and the user may have unlinked or edited the person since).
+     *
+     * @return false if the person no longer has {@code expectedCalendarId}
+     */
+    public boolean updateCalendar(long id, String expectedCalendarId, String calendarId, String calendarName) {
+        return db.tx(c -> {
+            try (var st = c.prepareStatement(
+                    "UPDATE person SET google_calendar_id=?, calendar_name=? WHERE id=? AND google_calendar_id IS ?")) {
+                st.setString(1, calendarId);
+                st.setString(2, calendarName);
+                st.setLong(3, id);
+                st.setString(4, expectedCalendarId);
+                return st.executeUpdate() == 1;
+            }
+        });
+    }
+
     public Optional<Person> findById(long id) {
         return db.tx(c -> {
             try (var st = c.prepareStatement("SELECT * FROM person WHERE id=?")) {
