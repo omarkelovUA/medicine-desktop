@@ -43,6 +43,20 @@ class PersonServiceTest {
     }
 
     @Test
+    void ensureDeletableRefusesParentWithChildren() {
+        var parent = persons.create("Олена", "#3a7bd5");
+        var child = personRepo.save(persons.create("Софія", "#e08a1e")
+                .withHostedGoogle("o@g", "c", parent.id(), "Ліки Софія"));
+        assertThatThrownBy(() -> persons.ensureDeletable(parent.id()))
+                .isInstanceOfSatisfying(PersonHostsChildrenException.class,
+                        e -> assertThat(e.childNames()).containsExactly("Софія"));
+        assertThatThrownBy(() -> persons.delete(parent.id())).isInstanceOf(PersonHostsChildrenException.class);
+        assertThat(persons.all()).hasSize(2);
+        persons.delete(child.id());
+        assertThat(persons.all()).hasSize(1);
+    }
+
+    @Test
     void deletePersonWithOnlyInactiveMedicinesRemovesThem() {
         long pid = persons.create("Марія", "#c0397b").id();
         var m = medicines.create(med(pid, d("2026-10-13"), new Course.Ongoing(), new Schedule.Daily(List.of(t("08:00")))));

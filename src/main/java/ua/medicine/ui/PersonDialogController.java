@@ -13,6 +13,7 @@ import ua.medicine.AppContext;
 import ua.medicine.domain.Person;
 import ua.medicine.i18n.Messages;
 import ua.medicine.service.PersonHasMedicinesException;
+import ua.medicine.service.PersonHostsChildrenException;
 
 import java.util.Optional;
 
@@ -61,8 +62,7 @@ public final class PersonDialogController {
                 try {
                     result[0] = existing == null
                             ? ctx.personService().create(text, color.selected())
-                            : ctx.personService().update(new Person(existing.id(), text, color.selected(),
-                            existing.googleEmail(), existing.googleCalendarId()));
+                            : ctx.personService().update(existing.withNameAndColor(text, color.selected()));
                 } catch (RuntimeException ex) {
                     problem = isUniqueViolation(ex) ? Messages.get("error.nameTaken") : null;
                     if (problem == null) {
@@ -86,9 +86,14 @@ public final class PersonDialogController {
                     return;
                 }
                 try {
-                    // token first: SQLite may reuse the id for the next new person
+                    ctx.personService().ensureDeletable(existing.id());
+                    // token before the row: SQLite may reuse the id for the next new person
                     ctx.googleAuth().forget(existing.id());
                     ctx.personService().delete(existing.id());
+                } catch (PersonHostsChildrenException ex) {
+                    Dialogs.error(pane.getScene().getWindow(), Messages.get("error.personHostsChildren",
+                            String.join(", ", ex.childNames())));
+                    e.consume();
                 } catch (PersonHasMedicinesException ex) {
                     Dialogs.error(pane.getScene().getWindow(), Messages.get("error.personHasMedicines"));
                     e.consume();

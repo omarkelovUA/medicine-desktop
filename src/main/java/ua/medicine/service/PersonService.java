@@ -28,11 +28,23 @@ public final class PersonService {
         return persons.save(person);
     }
 
-    /** Deletes a person who has no active medicines, together with their inactive ones. */
-    public void delete(long personId) {
+    /**
+     * @throws PersonHostsChildrenException if others are linked through this person's calendar
+     * @throws PersonHasMedicinesException  if the person has active medicines
+     */
+    public void ensureDeletable(long personId) {
+        var children = persons.findHostedBy(personId);
+        if (!children.isEmpty()) {
+            throw new PersonHostsChildrenException(personId, children.stream().map(Person::name).toList());
+        }
         if (medicines.countActiveByPerson(personId) > 0) {
             throw new PersonHasMedicinesException(personId);
         }
+    }
+
+    /** Deletes a person who hosts no one and has no active medicines, together with their inactive ones. */
+    public void delete(long personId) {
+        ensureDeletable(personId);
         medicines.deleteInactiveByPerson(personId);
         persons.delete(personId);
     }
