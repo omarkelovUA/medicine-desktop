@@ -16,8 +16,9 @@ public final class GoogleCalendarGatewayFactory implements CalendarGatewayFactor
 
     @Override
     public CalendarGateway forPerson(Person person) {
-        Credential credential = auth.load(person.id())
-                .orElseThrow(() -> new AuthRequiredException("No Google token for person " + person.id()));
+        long owner = person.tokenOwnerId(); // a child's calendar is reached with the parent's token
+        Credential credential = auth.load(owner)
+                .orElseThrow(() -> new AuthRequiredException("No Google token for person " + owner));
         return forCredential(credential);
     }
 
