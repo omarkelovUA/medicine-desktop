@@ -60,7 +60,7 @@ public final class GoogleLinkService {
         if (childId == hostId || !host.googleLinked() || host.hosted() || !hostedBy(childId).isEmpty()) {
             throw new IllegalArgumentException("Person " + hostId + " cannot host person " + childId);
         }
-        String calendarId = hostGateway.apply(host).ensureCalendar(childCalendarName(child.name()));
+        String calendarId = childCalendar(hostGateway.apply(host), child);
         Person linked = saveHostedLink(child, host, calendarId);
         if (!child.hosted()) {
             auth.forget(childId); // the child's own token, if any, is not used any more
@@ -88,15 +88,29 @@ public final class GoogleLinkService {
     }
 
     /**
+     * The child's remembered calendar if this account owns it, else a new one. Never found by name: a calendar
+     * with the same name may be left over from someone else, or be someone else's in this family.
+     */
+    private String childCalendar(CalendarGateway gateway, Person child) {
+        String remembered = child.googleCalendarId();
+        boolean someoneElses = remembered != null && persons.findAll().stream()
+                .anyMatch(p -> !p.id().equals(child.id()) && remembered.equals(p.googleCalendarId()));
+        if (remembered != null && !someoneElses && gateway.ownsCalendar(remembered)) {
+            return remembered;
+        }
+        return gateway.createCalendar(childCalendarName(child.name()));
+    }
+
+    /**
      * Points the host's children at their calendars in the host's (possibly new) account. The same account
-     * finds the same calendars, so nothing changes; another account gets them created and the doses pushed.
+     * still owns the same calendars, so nothing changes; another account gets them created and the doses pushed.
      * A child that fails here is left to the sync, which re-creates a calendar that answers 404.
      */
     void relinkChildren(CalendarGateway gateway, Person host) {
         for (Person child : hostedBy(host.id())) {
             try {
                 String name = childCalendarName(child.name());
-                String calendarId = gateway.ensureCalendar(name);
+                String calendarId = childCalendar(gateway, child);
                 if (!calendarId.equals(child.googleCalendarId())
                         && persons.updateCalendar(child.id(), child.googleCalendarId(), calendarId, name)) {
                     doses.markDirtyForPerson(child.id());
@@ -149,15 +163,16 @@ public final class GoogleLinkService {
      * Forgets the token; events already in Google stay there. Event ids are kept so that re-linking the
      * same account updates those events instead of duplicating them (another account answers 404 and
      * the events are created anew). A child's token is the parent's and stays; unlinking a parent unlinks
-     * their children too.
+     * their children too. A child's calendar id is kept: see {@link Person#unlinkedKeepingCalendar()}.
      */
     public Person unlink(long personId) {
         Person person = find(personId);
-        if (!person.hosted()) {
-            auth.forget(personId);
-            for (Person child : hostedBy(personId)) {
-                persons.save(child.withGoogle(null, null));
-            }
+        if (person.hosted()) {
+            return persons.save(person.unlinkedKeepingCalendar());
+        }
+        auth.forget(personId);
+        for (Person child : hostedBy(personId)) {
+            persons.save(child.unlinkedKeepingCalendar());
         }
         return persons.save(person.withGoogle(null, null));
     }

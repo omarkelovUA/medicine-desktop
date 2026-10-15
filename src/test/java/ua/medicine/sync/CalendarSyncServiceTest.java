@@ -430,11 +430,12 @@ class CalendarSyncServiceTest {
         sync.syncNow();
 
         var after = personRepo.findById(sofia.id()).orElseThrow();
-        assertThat(after.googleCalendarId()).isEqualTo("cal-Ліки Софія");
+        assertThat(fake.created).containsExactly("Ліки Софія");
+        assertThat(after.googleCalendarId()).startsWith("new-");
         assertThat(after.hosted()).isTrue();
         assertThat(after.calendarName()).isEqualTo("Ліки Софія");
         assertThat(doses(vit).getFirst().syncState()).isEqualTo(CLEAN);
-        assertThat(fake.eventCalendar.get(doses(vit).getFirst().calendarEventId())).isEqualTo("cal-Ліки Софія");
+        assertThat(fake.eventCalendar.get(doses(vit).getFirst().calendarEventId())).isEqualTo(after.googleCalendarId());
     }
 
     @Test
@@ -497,5 +498,21 @@ class CalendarSyncServiceTest {
         var after = personRepo.findById(sofia.id()).orElseThrow();
         assertThat(after.googleLinked()).isFalse();
         assertThat(after.hosted()).isFalse();
+    }
+
+    @Test
+    void deletedChildCalendarIsNotReplacedByAnotherWithTheSameName() {
+        var sofia = child("Софія", oleksandr);
+        personRepo.save(oleksandr.withGoogle(null, null)); // only the child syncs
+        fake.owned.add("cal-Ліки Оля"); // left by an earlier Оля
+        personRepo.save(sofia.withNameAndColor("Оля", sofia.color()));
+        fake.calendarDeleted = true;
+
+        sync.syncNow();
+
+        var after = personRepo.findById(sofia.id()).orElseThrow();
+        assertThat(after.googleCalendarId()).isNotEqualTo("cal-Ліки Оля");
+        assertThat(fake.created).containsExactly("Ліки Оля");
+        assertThat(after.calendarName()).isEqualTo("Ліки Оля");
     }
 }

@@ -58,7 +58,8 @@ For a linked child, `google_email` is the parent's e-mail (so `googleLinked()` s
   1. host must exist, be linked and not hosted; child must not be the host and must have no children of its own
      (otherwise `IllegalArgumentException`);
   2. gateway from the host's token (`AuthRequiredException` if none);
-  3. `calendarId = gateway.ensureCalendar("Ліки " + child.name())`;
+  3. the child's remembered calendar id if the host's account owns it (`ownsCalendar`) and no other person uses
+     it, else `gateway.createCalendar("Ліки " + child.name())` — a child's calendar is never looked up by name;
   4. save `withHostedGoogle(host.googleEmail(), calendarId, hostId, name)`; if the calendar id differs from the
      child's previous one, mark the child's doses dirty (same rule as `saveLink`);
   5. request a sync.
@@ -66,8 +67,9 @@ For a linked child, `google_email` is the parent's e-mail (so `googleLinked()` s
   updated to the new e-mail. If the account changed, the children's calendar ids answer 404 at the next sync and
   are re-created by the existing recovery.
 - `unlink(personId)`:
-  - for a hosted person: clear the link fields; **do not** forget any token (it is the parent's);
-  - for a parent: forget the token, unlink the person and each child.
+  - for a hosted person: clear e-mail, host and calendar name but keep the calendar id, so linking through the
+    same parent again reuses that calendar; **do not** forget any token (it is the parent's);
+  - for a parent: forget the token, unlink the person and each child (children keep their calendar ids).
 - A token is forgotten only by `tokenOwnerId` == the person's own id.
 
 ## Sync (`CalendarSyncService`)
@@ -79,8 +81,8 @@ For a linked child, `google_email` is the parent's e-mail (so `googleLinked()` s
 - **Rename:** before pushing a hosted person, if `calendarName` ≠ `"Ліки " + name`, call
   `gateway.renameCalendar(calendarId, newName)` and save the new `calendarName`. A failure is counted like other
   push failures and retried on the next sync.
-- **Calendar deleted** (`CalendarNotFoundException`): as today, but the calendar is re-created with the person's
-  calendar name (`"Ліки"` for own links, `"Ліки <name>"` for children), and a hosted person keeps its host fields.
+- **Calendar deleted** (`CalendarNotFoundException`): as today for own links (`ensureCalendar("Ліки")`); for a child
+  a new calendar `"Ліки <name>"` is always created (`createCalendar`), and the child keeps its host fields.
 - Push and pull of doses are unchanged — they already work per person and calendar id.
 
 `CalendarGateway` gets:

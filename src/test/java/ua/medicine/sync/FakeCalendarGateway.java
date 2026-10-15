@@ -4,10 +4,13 @@ import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.time.Instant;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /** In-memory calendar for one account. */
 class FakeCalendarGateway implements CalendarGateway {
@@ -36,7 +39,29 @@ class FakeCalendarGateway implements CalendarGateway {
     /** Runs while a rename or a calendar creation is "on the network". */
     Runnable onCalendarCall = () -> {
     };
+    /** Ids of the calendars this account owns. */
+    final Set<String> owned = new HashSet<>();
+    /** Names passed to createCalendar, in order. */
+    final List<String> created = new ArrayList<>();
     private int nextId;
+    private int nextCalendar;
+
+    @Override
+    public String createCalendar(String name) {
+        check();
+        onCalendarCall.run();
+        calendarDeleted = false;
+        created.add(name);
+        String id = "new-" + name + "-" + (++nextCalendar);
+        owned.add(id);
+        return id;
+    }
+
+    @Override
+    public boolean ownsCalendar(String calendarId) {
+        check();
+        return !calendarDeleted && owned.contains(calendarId);
+    }
 
     @Override
     public String ensureCalendar(String name) {
@@ -46,6 +71,7 @@ class FakeCalendarGateway implements CalendarGateway {
             calendarDeleted = false;
             calendarsCreated++;
         }
+        owned.add("cal-" + name);
         return "cal-" + name;
     }
 

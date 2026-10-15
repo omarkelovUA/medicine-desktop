@@ -116,7 +116,9 @@ public final class CalendarSyncService implements SyncTrigger {
                 } catch (CalendarNotFoundException e) {
                     log.warn("Calendar of person {} was deleted; creating it again", person.id());
                     String name = GoogleLinkService.calendarNameFor(person);
-                    Person recreated = person.withCalendar(gateway.ensureCalendar(name), person.hosted() ? name : null);
+                    // a child's calendar is never looked up by name: one with that name may be someone else's
+                    String calendarId = person.hosted() ? gateway.createCalendar(name) : gateway.ensureCalendar(name);
+                    Person recreated = person.withCalendar(calendarId, person.hosted() ? name : null);
                     if (persons.updateCalendar(person.id(), person.googleCalendarId(), recreated.googleCalendarId(),
                             recreated.calendarName())) {
                         doses.markDirtyForPerson(person.id()); // every event went with the old calendar

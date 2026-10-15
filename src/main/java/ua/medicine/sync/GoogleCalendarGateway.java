@@ -61,11 +61,30 @@ public final class GoogleCalendarGateway implements CalendarGateway {
             if (found.isPresent()) {
                 return found.get();
             }
-            var calendar = new com.google.api.services.calendar.model.Calendar()
-                    .setSummary(name)
-                    .setTimeZone(zone.getId());
-            return client.calendars().insert(calendar).execute().getId();
+            return insertCalendar(name);
         });
+    }
+
+    @Override
+    public String createCalendar(String name) {
+        return call(null, null, () -> insertCalendar(name));
+    }
+
+    @Override
+    public boolean ownsCalendar(String calendarId) {
+        try {
+            return call(null, calendarId,
+                    () -> "owner".equals(client.calendarList().get(calendarId).execute().getAccessRole()));
+        } catch (CalendarNotFoundException e) {
+            return false; // deleted, or another account's
+        }
+    }
+
+    private String insertCalendar(String name) throws IOException {
+        var calendar = new com.google.api.services.calendar.model.Calendar()
+                .setSummary(name)
+                .setTimeZone(zone.getId());
+        return client.calendars().insert(calendar).execute().getId();
     }
 
     @Override

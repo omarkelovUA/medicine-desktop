@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import ua.medicine.AppPaths;
 import ua.medicine.domain.Course;
+import ua.medicine.domain.DoseOccurrence;
 import ua.medicine.domain.Person;
 import ua.medicine.domain.Schedule;
 import ua.medicine.persistence.Database;
@@ -236,10 +237,14 @@ class GoogleLinkServiceTest {
         doses.recordPushed(dose.id(), "ev", null, dose.syncState());
         var newAccount = new FakeCalendarGateway();
 
+        newAccount.owned.add("cal-Ліки Софія"); // a calendar with the same name is not the child's
+
         linkService().relinkChildren(newAccount, olena);
 
         var after = persons.findById(sofia.id()).orElseThrow();
-        assertThat(after.googleCalendarId()).isEqualTo("cal-Ліки Софія");
+        assertThat(newAccount.created).containsExactly("Ліки Софія");
+        assertThat(newAccount.owned).contains(after.googleCalendarId());
+        assertThat(after.googleCalendarId()).isNotIn("old-account-cal", "cal-Ліки Софія");
         assertThat(after.hosted()).isTrue();
         assertThat(doses.findById(dose.id()).orElseThrow().syncState()).isEqualTo(DIRTY);
     }
@@ -247,15 +252,19 @@ class GoogleLinkServiceTest {
     @Test
     void relinkingParentToSameAccountKeepsChildrenDosesClean() {
         var olena = parent();
-        var sofia = child("Софія", olena); // already in "cal-Ліки Софія", which the account finds again
+        var sofia = child("Софія", olena); // in "cal-Ліки Софія", which the account still owns
         var m = medicines.create(med(sofia.id(), d("2026-10-13"), new Course.Ongoing(),
                 new Schedule.Daily(List.of(t("08:00")))));
         var dose = doses.findByMedicineBetween(m.id(), dt("2026-10-13T00:00"), dt("2026-10-14T00:00")).getFirst();
         doses.recordPushed(dose.id(), "ev", null, dose.syncState());
 
-        linkService().relinkChildren(new FakeCalendarGateway(), olena);
+        var sameAccount = new FakeCalendarGateway();
+        sameAccount.owned.add("cal-Ліки Софія");
+
+        linkService().relinkChildren(sameAccount, olena);
 
         assertThat(doses.findById(dose.id()).orElseThrow().syncState()).isEqualTo(CLEAN);
+        assertThat(sameAccount.created).isEmpty();
     }
 
     @Test
@@ -272,5 +281,74 @@ class GoogleLinkServiceTest {
                 .isInstanceOf(IllegalArgumentException.class);
         assertThat(token).exists();
         assertThat(persons.findById(sofia.id()).orElseThrow().googleCalendarId()).isEqualTo("calS");
+    }
+
+    private DoseOccurrence pushedDose(Person p) {
+        var m = medicines.create(med(p.id(), d("2026-10-13"), new Course.Ongoing(),
+                new Schedule.Daily(List.of(t("08:00")))));
+        var dose = doses.findByMedicineBetween(m.id(), dt("2026-10-13T00:00"), dt("2026-10-14T00:00")).getFirst();
+        doses.recordPushed(dose.id(), "ev", null, dose.syncState());
+        return dose;
+    }
+
+    @Test
+    void leftoverCalendarWithTheSameNameIsNotReused() {
+        var olena = parent();
+        var sofia = persons.save(new Person(null, "Софія", "#e08a1e", null, null));
+        var account = new FakeCalendarGateway();
+        account.owned.add("cal-Ліки Софія"); // left by an earlier Софія
+
+        var linked = linkService().linkThroughHost(sofia.id(), olena.id(), p -> account);
+
+        assertThat(account.created).containsExactly("Ліки Софія");
+        assertThat(linked.googleCalendarId()).isNotEqualTo("cal-Ліки Софія");
+    }
+
+    @Test
+    void relinkingThroughTheSameParentReusesTheCalendarAndKeepsDosesClean() {
+        var olena = parent();
+        var sofia = child("Софія", olena);
+        var dose = pushedDose(sofia);
+        var account = new FakeCalendarGateway();
+        account.owned.add("cal-Ліки Софія");
+        var link = linkService();
+
+        link.unlink(sofia.id());
+        var relinked = link.linkThroughHost(sofia.id(), olena.id(), p -> account);
+
+        assertThat(relinked.googleCalendarId()).isEqualTo("cal-Ліки Софія");
+        assertThat(account.created).isEmpty();
+        assertThat(doses.findById(dose.id()).orElseThrow().syncState()).isEqualTo(CLEAN);
+    }
+
+    @Test
+    void relinkingThroughAnotherParentCreatesANewCalendar() {
+        var olena = parent();
+        var sofia = child("Софія", olena);
+        var dose = pushedDose(sofia);
+        var ivan = persons.save(new Person(null, "Іван", "#222222", "i@gmail.com", "calI"));
+        var ivanAccount = new FakeCalendarGateway(); // does not own Олена's calendars
+        var link = linkService();
+
+        link.unlink(sofia.id());
+        var relinked = link.linkThroughHost(sofia.id(), ivan.id(), p -> ivanAccount);
+
+        assertThat(ivanAccount.created).containsExactly("Ліки Софія");
+        assertThat(relinked.googleCalendarId()).isNotEqualTo("cal-Ліки Софія");
+        assertThat(doses.findById(dose.id()).orElseThrow().syncState()).isEqualTo(DIRTY);
+    }
+
+    @Test
+    void calendarOfAnotherPersonIsNeverReused() {
+        var olena = parent();
+        // linked with her own account before, which is the parent's: her calendar id is the parent's «Ліки»
+        var sofia = persons.save(new Person(null, "Софія", "#e08a1e", "o@gmail.com", "calO"));
+        var account = new FakeCalendarGateway();
+        account.owned.add("calO");
+
+        var linked = linkService().linkThroughHost(sofia.id(), olena.id(), p -> account);
+
+        assertThat(linked.googleCalendarId()).isNotEqualTo("calO");
+        assertThat(account.created).containsExactly("Ліки Софія");
     }
 }

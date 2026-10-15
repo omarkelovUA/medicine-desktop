@@ -12,6 +12,12 @@ public interface CalendarGateway {
     /** Finds or creates the calendar with this name and returns its id. */
     String ensureCalendar(String name);
 
+    /** Creates a new calendar, even if one with this name exists, and returns its id. */
+    String createCalendar(String name);
+
+    /** Whether the calendar exists and is this account's own (not deleted, not just shared with it). */
+    boolean ownsCalendar(String calendarId);
+
     /** @throws CalendarNotFoundException if the calendar no longer exists */
     void renameCalendar(String calendarId, String name);
 

@@ -38,6 +38,14 @@ public record Person(Long id, String name, String color, String googleEmail, Str
         return new Person(id, name, color, email, calendarId, null, null);
     }
 
+    /**
+     * Unlinks a child but remembers their calendar, so that linking them through the same parent again finds
+     * it: the calendar is told apart by its id, never by its name.
+     */
+    public Person unlinkedKeepingCalendar() {
+        return new Person(id, name, color, null, googleCalendarId, null, null);
+    }
+
     /** Links to a calendar in the host's account. */
     public Person withHostedGoogle(String email, String calendarId, long hostId, String calendarName) {
         return new Person(id, name, color, email, calendarId, hostId, calendarName);
