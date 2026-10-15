@@ -24,6 +24,7 @@ import ua.medicine.AppContext;
 import ua.medicine.domain.Medicine;
 import ua.medicine.domain.Person;
 import ua.medicine.i18n.Messages;
+import ua.medicine.sync.AuthRequiredException;
 import ua.medicine.sync.SyncResult;
 
 import java.time.LocalDate;
@@ -391,10 +392,23 @@ public final class DashboardController {
     }
 
     private void linkThroughHost(Person child, Person host) {
-        inBackground(child.id(), () -> ctx.googleLink().linkThroughHost(child.id(), host.id()));
+        inBackground(child.id(), () -> {
+            try {
+                ctx.googleLink().linkThroughHost(child.id(), host.id());
+            } catch (AuthRequiredException e) {
+                Platform.runLater(() -> authFailedPersonIds.add(host.id())); // the parent's tab shows ⚠
+                throw e;
+            }
+        }, e -> e instanceof AuthRequiredException
+                ? Messages.get("google.hostReconnect", host.name())
+                : Messages.get("google.linkFailed"));
     }
 
     private void inBackground(long personId, Runnable linking) {
+        inBackground(personId, linking, e -> Messages.get("google.linkFailed"));
+    }
+
+    private void inBackground(long personId, Runnable linking, Function<RuntimeException, String> failureMessage) {
         googleButton.setDisable(true);
         googleButton.setText("…");
         ctx.io().submit(() -> {
@@ -404,7 +418,7 @@ public final class DashboardController {
             } catch (RuntimeException e) {
                 Platform.runLater(() -> {
                     log.warn("Linking Google for person {} failed", personId, e);
-                    Dialogs.error(window(), Messages.get("google.linkFailed"));
+                    Dialogs.error(window(), failureMessage.apply(e));
                     refresh();
                 });
             }

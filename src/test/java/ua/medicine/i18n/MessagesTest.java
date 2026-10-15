@@ -28,4 +28,10 @@ class MessagesTest {
         assertThat(Messages.get("google.throughHost", "Олена", "o@g")).isEqualTo("Через календар Олена (o@g)");
         assertThat(Messages.get("google.connectedThrough", "Олена")).isEqualTo("G ✓ через Олена");
     }
+
+    @Test
+    void hostTokenExpiredText() {
+        assertThat(Messages.get("google.hostReconnect", "Олена"))
+                .isEqualTo("Доступ до Google у особи Олена закінчився. Спершу перепідключіть Google на її вкладці.");
+    }
 }

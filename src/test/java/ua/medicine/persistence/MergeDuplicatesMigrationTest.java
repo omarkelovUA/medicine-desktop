@@ -182,4 +182,19 @@ class MergeDuplicatesMigrationTest {
                 medicine(2, 1, "Вітамін A", "", true), period(2, "2099-03-01", 30));
         assertThat(migratedMedicines()).hasSize(1);
     }
+
+    @Test
+    void v4LeavesExistingPersonsLinkedWithTheirOwnAccounts() {
+        migrateTo("3");
+        sql("INSERT INTO person(id, name, color, google_email, google_calendar_id) "
+                + "VALUES (1, 'Олександр', '#3a7bd5', 'o@gmail.com', 'calO')");
+        try (var db = new Database(url)) {
+            db.migrate();
+            var p = new PersonRepository(db).findById(1).orElseThrow();
+            assertThat(p.googleCalendarId()).isEqualTo("calO");
+            assertThat(p.calendarHostId()).isNull();
+            assertThat(p.calendarName()).isNull();
+            assertThat(p.tokenOwnerId()).isEqualTo(1L);
+        }
+    }
 }

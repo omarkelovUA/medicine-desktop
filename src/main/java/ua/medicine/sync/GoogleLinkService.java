@@ -1,11 +1,14 @@
 package ua.medicine.sync;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import ua.medicine.domain.Person;
 import ua.medicine.persistence.DoseRepository;
 import ua.medicine.persistence.PersonRepository;
 import ua.medicine.service.SyncTrigger;
 
 import java.util.List;
+import java.util.function.Function;
 
 /**
  * Connects a person to their Google account and the "Ліки" calendar in it, or (a child) to a calendar
@@ -14,6 +17,7 @@ import java.util.List;
 public final class GoogleLinkService {
 
     public static final String CALENDAR_NAME = "Ліки";
+    private static final Logger log = LoggerFactory.getLogger(GoogleLinkService.class);
 
     private final GoogleAuthService auth;
     private final GoogleCalendarGatewayFactory gateways;
@@ -36,6 +40,7 @@ public final class GoogleLinkService {
         GoogleCalendarGateway gateway = gateways.forCredential(auth.authorize(personId));
         String email = gateway.primaryEmail();
         Person linked = saveLink(person, email, gateway.ensureCalendar(CALENDAR_NAME));
+        relinkChildren(gateway, linked);
         syncTrigger.requestSync();
         return linked;
     }
@@ -46,16 +51,20 @@ public final class GoogleLinkService {
      * @throws IllegalArgumentException if the host is not linked with their own account, or the child hosts others
      */
     public Person linkThroughHost(long childId, long hostId) {
+        return linkThroughHost(childId, hostId, gateways::forPerson);
+    }
+
+    Person linkThroughHost(long childId, long hostId, Function<Person, CalendarGateway> hostGateway) {
         Person child = find(childId);
         Person host = find(hostId);
         if (childId == hostId || !host.googleLinked() || host.hosted() || !hostedBy(childId).isEmpty()) {
             throw new IllegalArgumentException("Person " + hostId + " cannot host person " + childId);
         }
-        String calendarId = gateways.forPerson(host).ensureCalendar(childCalendarName(child.name()));
+        String calendarId = hostGateway.apply(host).ensureCalendar(childCalendarName(child.name()));
+        Person linked = saveHostedLink(child, host, calendarId);
         if (!child.hosted()) {
             auth.forget(childId); // the child's own token, if any, is not used any more
         }
-        Person linked = saveHostedLink(child, host, calendarId);
         syncTrigger.requestSync();
         return linked;
     }
@@ -76,6 +85,26 @@ public final class GoogleLinkService {
             doses.markDirtyForPerson(child.id());
         }
         return linked;
+    }
+
+    /**
+     * Points the host's children at their calendars in the host's (possibly new) account. The same account
+     * finds the same calendars, so nothing changes; another account gets them created and the doses pushed.
+     * A child that fails here is left to the sync, which re-creates a calendar that answers 404.
+     */
+    void relinkChildren(CalendarGateway gateway, Person host) {
+        for (Person child : hostedBy(host.id())) {
+            try {
+                String name = childCalendarName(child.name());
+                String calendarId = gateway.ensureCalendar(name);
+                if (!calendarId.equals(child.googleCalendarId())
+                        && persons.updateCalendar(child.id(), child.googleCalendarId(), calendarId, name)) {
+                    doses.markDirtyForPerson(child.id());
+                }
+            } catch (RuntimeException e) {
+                log.warn("Finding the calendar of person {} in the new account failed", child.id(), e);
+            }
+        }
     }
 
     /** Persons another person can be linked through: linked with their own account. */

@@ -4,6 +4,7 @@ import com.google.api.client.auth.oauth2.TokenResponseException;
 import com.google.api.client.googleapis.json.GoogleJsonResponseException;
 import com.google.api.client.util.DateTime;
 import com.google.api.services.calendar.Calendar;
+import com.google.api.services.calendar.model.CalendarListEntry;
 import com.google.api.services.calendar.model.Event;
 import com.google.api.services.calendar.model.EventDateTime;
 import com.google.api.services.calendar.model.EventReminder;
@@ -15,6 +16,7 @@ import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 
 /** Google Calendar API v3 implementation of {@link CalendarGateway}. */
 public final class GoogleCalendarGateway implements CalendarGateway {
@@ -33,6 +35,20 @@ public final class GoogleCalendarGateway implements CalendarGateway {
         this.client = client;
     }
 
+    /**
+     * The account's own calendar with this name. Calendars shared with the account are skipped: writing to
+     * someone else's calendar may be refused, and it is not this account's to use.
+     */
+    static Optional<String> ownedCalendar(List<CalendarListEntry> items, String name) {
+        if (items == null) {
+            return Optional.empty();
+        }
+        return items.stream()
+                .filter(e -> name.equals(e.getSummary()) && "owner".equals(e.getAccessRole()))
+                .map(CalendarListEntry::getId)
+                .findFirst();
+    }
+
     /** The account's email (id of its primary calendar). */
     public String primaryEmail() {
         return call(null, null, () -> client.calendarList().get("primary").execute().getId());
@@ -41,13 +57,9 @@ public final class GoogleCalendarGateway implements CalendarGateway {
     @Override
     public String ensureCalendar(String name) {
         return call(null, null, () -> {
-            var items = client.calendarList().list().execute().getItems();
-            if (items != null) {
-                for (var entry : items) {
-                    if (name.equals(entry.getSummary())) {
-                        return entry.getId();
-                    }
-                }
+            var found = ownedCalendar(client.calendarList().list().execute().getItems(), name);
+            if (found.isPresent()) {
+                return found.get();
             }
             var calendar = new com.google.api.services.calendar.model.Calendar()
                     .setSummary(name)

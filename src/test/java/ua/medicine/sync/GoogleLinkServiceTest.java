@@ -224,4 +224,53 @@ class GoogleLinkServiceTest {
                 .isInstanceOf(IllegalArgumentException.class);
         assertThat(persons.findById(sofia.id()).orElseThrow().googleLinked()).isFalse();
     }
+
+    @Test
+    void relinkingParentToAnotherAccountMovesChildrenToCalendarsThere() {
+        var olena = parent();
+        var sofia = persons.save(new Person(null, "Софія", "#e08a1e", null, null)
+                .withHostedGoogle("o@gmail.com", "old-account-cal", olena.id(), "Ліки Софія"));
+        var m = medicines.create(med(sofia.id(), d("2026-10-13"), new Course.Ongoing(),
+                new Schedule.Daily(List.of(t("08:00")))));
+        var dose = doses.findByMedicineBetween(m.id(), dt("2026-10-13T00:00"), dt("2026-10-14T00:00")).getFirst();
+        doses.recordPushed(dose.id(), "ev", null, dose.syncState());
+        var newAccount = new FakeCalendarGateway();
+
+        linkService().relinkChildren(newAccount, olena);
+
+        var after = persons.findById(sofia.id()).orElseThrow();
+        assertThat(after.googleCalendarId()).isEqualTo("cal-Ліки Софія");
+        assertThat(after.hosted()).isTrue();
+        assertThat(doses.findById(dose.id()).orElseThrow().syncState()).isEqualTo(DIRTY);
+    }
+
+    @Test
+    void relinkingParentToSameAccountKeepsChildrenDosesClean() {
+        var olena = parent();
+        var sofia = child("Софія", olena); // already in "cal-Ліки Софія", which the account finds again
+        var m = medicines.create(med(sofia.id(), d("2026-10-13"), new Course.Ongoing(),
+                new Schedule.Daily(List.of(t("08:00")))));
+        var dose = doses.findByMedicineBetween(m.id(), dt("2026-10-13T00:00"), dt("2026-10-14T00:00")).getFirst();
+        doses.recordPushed(dose.id(), "ev", null, dose.syncState());
+
+        linkService().relinkChildren(new FakeCalendarGateway(), olena);
+
+        assertThat(doses.findById(dose.id()).orElseThrow().syncState()).isEqualTo(CLEAN);
+    }
+
+    @Test
+    void childKeepsOwnTokenWhenLinkingThroughHostFails() throws Exception {
+        var olena = parent();
+        var sofia = persons.save(new Person(null, "Софія", "#e08a1e", "s@gmail.com", "calS"));
+        Path token = home.resolve("tokens").resolve(String.valueOf(sofia.id())).resolve("StoredCredential");
+        Files.createDirectories(token.getParent());
+        Files.writeString(token, "x");
+        var hostAccount = new FakeCalendarGateway();
+        hostAccount.onCalendarCall = () -> persons.save(olena.withGoogle(null, null)); // parent unlinked meanwhile
+
+        assertThatThrownBy(() -> linkService().linkThroughHost(sofia.id(), olena.id(), p -> hostAccount))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThat(token).exists();
+        assertThat(persons.findById(sofia.id()).orElseThrow().googleCalendarId()).isEqualTo("calS");
+    }
 }
